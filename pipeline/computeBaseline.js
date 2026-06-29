@@ -1,32 +1,5 @@
-import config from "./config.js";
-
-const getWeight = (creationTimeSeconds) => {
-  const age = (Date.now() - creationTimeSeconds * 1000) / (1000 * 60 * 60 * 24);
-  return Math.exp(-(config.lambda * age));
-};
-
-const getPercentile = (arr, p) => {
-  const sorted = [...arr].sort((a, b) => a - b);
-  const id = (arr.length - 1) * (p / 100);
-  return sorted[Math.floor(id)];
-};
-
-const getMean = (arr) => {
-  let summ = 0;
-  for (let i = 0; i < arr.length; i++) {
-    summ += arr[i];
-  }
-  return summ / arr.length;
-};
-
-const getStd = (arr) => {
-  const av = getMean(arr);
-  let std = 0;
-  for (let i = 0; i < arr.length; i++) {
-    std += Math.pow(arr[i] - av, 2);
-  }
-  return Math.sqrt(std / arr.length);
-};
+import { getWeight, getPercentile, getMean, getStd } from "../shared/mathUtils.js";
+import { getDcrBucket } from "../shared/dcrUtils.js";
 
 const computeBaseline = (usersSubmissions, userRatings) => {
   const allUserstopicData = {};
@@ -65,20 +38,11 @@ const computeBaseline = (usersSubmissions, userRatings) => {
         }
         topicData[tag].ratings.push(rating);
         const diffGap = rating - userRating;
-        if (diffGap >= 0 && diffGap <= 100) {
-          topicData[tag].dcr.bucket0_100.attempted += weight;
-          if (solved) {
-            topicData[tag].dcr.bucket0_100.solved += weight;
-          }
-        } else if (diffGap > 100 && diffGap <= 300) {
-          topicData[tag].dcr.bucket100_300.attempted += weight;
-          if (solved) {
-            topicData[tag].dcr.bucket100_300.solved += weight;
-          }
-        } else if (diffGap > 300) {
-          topicData[tag].dcr.bucket300plus.attempted += weight;
-          if (solved) {
-            topicData[tag].dcr.bucket300plus.solved += weight;
+        const bucket= getDcrBucket(diffGap);
+        if(bucket){
+          topicData[tag].dcr[bucket].attempted+=weight;
+          if(solved){
+            topicData[tag].dcr[bucket].solved+=weight;
           }
         }
       }
