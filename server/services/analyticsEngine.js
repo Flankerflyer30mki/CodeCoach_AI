@@ -22,6 +22,7 @@ const computeUserAnalytics = (submissions, userRating) => {
       const tag = tags[k];
       if (!topicData[tag]) {
         topicData[tag] = {
+          rawAttempts: 0,
           weightedAttempts: 0,
           weightedSolved: 0,
           ratings: [],
@@ -34,6 +35,7 @@ const computeUserAnalytics = (submissions, userRating) => {
       }
 
       topicData[tag].weightedAttempts += weight;
+      topicData[tag].rawAttempts += 1;
       if (solved) {
         topicData[tag].weightedSolved += weight;
       }
@@ -62,6 +64,7 @@ const computeUserAnalytics = (submissions, userRating) => {
       attemptRatio,
       solveRate,
       attemptCount: topicData[tag].weightedAttempts,
+      rawAttemptCount: topicData[tag].rawAttempts,
       coverage: {
         p10: getPercentile(topicData[tag].ratings, 10),
         p50: getPercentile(topicData[tag].ratings, 50),
