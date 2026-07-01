@@ -1,13 +1,12 @@
 import PeerBaseline from "../models/peerBaseline.js";
 import { getMean } from "../../shared/mathUtils.js";
-
+import config from "../../pipeline/config.js";
+import { getProblemsForTopic } from "./cfService.js";
 const getPeerBaseline = async (userRating) => {
     const userBandMin = Math.floor(userRating / 100) * 100;
   const bandMin = userBandMin + 100;
   const bandMax = userBandMin + 200;
-  console.log(`Querying band: ${bandMin}-${bandMax}`);
   const results = await PeerBaseline.find({ bandMin, bandMax });
-  console.log(`Documents found: ${results.length}`);
   return results;
 };
 
@@ -82,7 +81,7 @@ const computePriority = (gaps, confidence, peerTopicBaseline) => {
   return { importance, total_gap, priority };
 };
 
-const getRecommendations = async (userMetrics, userRating) => {
+const getRecommendations = async (userMetrics, userRating,solvedSet) => {
   const peerBaseline = await getPeerBaseline(userRating);
   const baselineByTopic = {};
   for (const doc of peerBaseline) {
@@ -97,7 +96,9 @@ const getRecommendations = async (userMetrics, userRating) => {
     if (!peerTopicBaseline) {
       continue;
     }
-
+    if(peerTopicBaseline.metrics.attemptRatio.mean < config.minImportanceThreshold){
+    continue;
+    }
     const confidence = computeConfidence(userTopicMetrics);
     const gaps = computeGaps(userTopicMetrics, peerTopicBaseline);
     const classification = classify(gaps, confidence, peerTopicBaseline);
@@ -109,10 +110,10 @@ const getRecommendations = async (userMetrics, userRating) => {
       priority,
       confidence,
       gaps,
+      recommendedDifficulty: Math.round(peerTopicBaseline.metrics.coverage.p50.mean / 100) * 100,
     });
   }
   results.sort((a, b) => b.priority - a.priority);
-
   const weakTopics = results.filter(
     (r) =>
       r.classification === "avoided" ||
@@ -123,6 +124,24 @@ const getRecommendations = async (userMetrics, userRating) => {
   const insufficientData = results.filter(
     (r) => r.classification === "insufficient_data",
   );
+  const top3 = weakTopics.slice(0, 3);
+
+    for(const weakTopic of top3){
+        const problems = await getProblemsForTopic(weakTopic.topic, weakTopic.recommendedDifficulty);
+        
+        const unsolved = problems.filter(p => 
+            !solvedSet.has(`${p.contestId}-${p.index}`)
+        );
+        
+        weakTopic.recommendedProblems = unsolved.slice(0, 5).map(p => ({
+            name: p.name,
+            contestId: p.contestId,
+            index: p.index,
+            rating: p.rating,
+            url: `https://codeforces.com/problemset/problem/${p.contestId}/${p.index}`
+        }));
+    }
+  
 
   return {
     weakTopics,

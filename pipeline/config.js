@@ -4,7 +4,8 @@ dotenv.config();
 const config = {
   // db
   mongoUri: process.env.MONGO_URI,
-
+  
+  minImportanceThreshold: 0.025,
   // Cf API
   cfApiBase: process.env.CF_API_BASE,
 

@@ -12,10 +12,10 @@ export const analyzeUser = async (req, res) => {
         const submissions = await getUserSubmissions(handle);
 
         // step 3 — compute this user's metrics using analyticsEngine
-        const userMetrics = computeUserAnalytics(submissions, userInfo.rating);
+        const { userMetrics, solvedSet } = computeUserAnalytics(submissions, userInfo.rating);
 
         // step 4 — compare against peer baseline and get recommendations
-        const recommendations = await getRecommendations(userMetrics, userInfo.rating);
+        const recommendations = await getRecommendations(userMetrics, userInfo.rating, solvedSet);
 
         // step 5 — send everything back to React
         res.json({

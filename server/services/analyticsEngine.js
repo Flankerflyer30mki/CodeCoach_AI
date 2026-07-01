@@ -4,7 +4,7 @@ import { getDcrBucket } from "../../shared/dcrUtils.js";
 const computeUserAnalytics = (submissions, userRating) => {
   const topicData = {};
   let totalWeightedAttempts = 0;
-
+  const solvedSet = new Set();
   for (let j = 0; j < submissions.length; j++) {
     const submission = submissions[j];
     const weight = getWeight(submission.creationTimeSeconds);
@@ -40,7 +40,11 @@ const computeUserAnalytics = (submissions, userRating) => {
         topicData[tag].weightedSolved += weight;
       }
       topicData[tag].ratings.push(rating);
-
+      if (solved) {
+        solvedSet.add(
+          `${submission.problem.contestId}-${submission.problem.index}`,
+        );
+      }
       const diffGap = rating - userRating;
       const bucket = getDcrBucket(diffGap);
       if (bucket) {
@@ -90,7 +94,7 @@ const computeUserAnalytics = (submissions, userRating) => {
     };
   }
 
-  return userMetrics;
+  return { userMetrics, solvedSet };
 };
 
 export { computeUserAnalytics };
