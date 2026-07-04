@@ -1,6 +1,7 @@
 import { getUserInfo, getUserSubmissions } from "../services/cfService.js";
 import {computeUserAnalytics} from "../services/analyticsEngine.js";
 import { getRecommendations } from "../services/recommendationEngine.js";
+import { generateCoachingReport } from "../services/llmService.js";
 
 export const analyzeUser = async (req, res) => {
     try {
@@ -17,12 +18,15 @@ export const analyzeUser = async (req, res) => {
         // step 4 — compare against peer baseline and get recommendations
         const recommendations = await getRecommendations(userMetrics, userInfo.rating, solvedSet);
 
+        const coachingReport = await generateCoachingReport(handle, userInfo.rating, recommendations);
+
         // step 5 — send everything back to React
         res.json({
             handle,
             rating: userInfo.rating,
             rank: userInfo.rank,
             recommendations,
+            coachingReport,
         });
 
     } catch(error) {
