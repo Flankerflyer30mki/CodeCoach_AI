@@ -4,6 +4,12 @@ const classificationColors = {
   struggling: "bg-orange-50 text-orange-800",
 };
 
+const metricDescriptions = {
+  targetDifficulty: "Problem rating peers solve in this topic",
+  coverageGap: "Your peers vs you in rating points(90th %ile comparison)",
+  confidence: "Trust level based on your attempt history",
+};
+
 export default function WeakTopicCard({ topic }) {
   const {
     topic: name,
@@ -14,6 +20,10 @@ export default function WeakTopicCard({ topic }) {
     gaps,
     recommendedProblems,
   } = topic;
+
+  const coverageGap = Math.round(gaps.coverageGap);
+  const coverageGapDisplay =
+    coverageGap >= 0 ? `+${coverageGap}` : `${coverageGap}`;
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5">
@@ -33,21 +43,30 @@ export default function WeakTopicCard({ topic }) {
 
       <div className="grid grid-cols-3 gap-3 mb-4">
         <div className="bg-gray-50 rounded-lg p-3">
-          <p className="text-xs text-gray-400 mb-1">Target difficulty</p>
-          <p className="text-sm font-medium text-gray-900">
+          <p className="text-sm font-medium text-gray-900 mb-1">
             {recommendedDifficulty}
           </p>
-        </div>
-        <div className="bg-gray-50 rounded-lg p-3">
-          <p className="text-xs text-gray-400 mb-1">Coverage gap</p>
-          <p className="text-sm font-medium text-gray-900">
-            +{Math.round(gaps.coverageGap)}
+          <p className="text-xs text-gray-400">Target difficulty</p>
+          <p className="text-xs text-gray-300 mt-1">
+            {metricDescriptions.targetDifficulty}
           </p>
         </div>
         <div className="bg-gray-50 rounded-lg p-3">
-          <p className="text-xs text-gray-400 mb-1">Confidence</p>
-          <p className="text-sm font-medium text-gray-900">
+          <p className="text-sm font-medium text-gray-900 mb-1">
+            {coverageGapDisplay}
+          </p>
+          <p className="text-xs text-gray-400">Coverage gap</p>
+          <p className="text-xs text-gray-300 mt-1">
+            {metricDescriptions.coverageGap}
+          </p>
+        </div>
+        <div className="bg-gray-50 rounded-lg p-3">
+          <p className="text-sm font-medium text-gray-900 mb-1">
             {Math.round(confidence * 100)}%
+          </p>
+          <p className="text-xs text-gray-400">Confidence</p>
+          <p className="text-xs text-gray-300 mt-1">
+            {metricDescriptions.confidence}
           </p>
         </div>
       </div>

@@ -3,6 +3,8 @@ import CoachingReport from "../components/CoachingReport";
 import WeakTopicCard from "../components/WeakTopicCard";
 import StrongTopics from "../components/StrongTopics";
 import StudyPlan from "../components/StudyPlan";
+import PriorityChart from "../components/charts/priorityChart";
+import DifficultyChart from "../components/charts/DifficultyChart.jsx";
 
 export default function ResultsPage() {
   const { state } = useLocation();
@@ -40,16 +42,25 @@ export default function ResultsPage() {
 
         {/* Coaching Report */}
         <CoachingReport report={coachingReport} />
-
+        {/* Priority Chart */}
+        <div className="mt-8">
+          <PriorityChart weakTopics={recommendations.weakTopics} />
+        </div>
+        {/*Difficulty Chart */}
+        <div className="mt-6">
+          <DifficultyChart weakTopics={recommendations.weakTopics} />
+        </div>
         {/* Weak Topics */}
         <div className="mt-8">
           <h3 className="text-sm font-medium text-gray-500 mb-3">
             Weak topics — ranked by priority
           </h3>
-          <div className="flex flex-col gap-3">
-            {recommendations.weakTopics.map((topic) => (
-              <WeakTopicCard key={topic.topic} topic={topic} />
-            ))}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {recommendations.weakTopics
+              .filter((t) => t.priority > 0)
+              .map((topic) => (
+                <WeakTopicCard key={topic.topic} topic={topic} />
+              ))}
           </div>
         </div>
 
