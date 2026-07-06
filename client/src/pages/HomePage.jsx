@@ -227,9 +227,9 @@ export default function HomePage() {
           className="text-2xl font-semibold text-center mb-12"
           style={{ color: "var(--text-primary)" }}
         >
-          What you'll get
+          The analytics behind your report
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {[
             {
               icon: "📊",
@@ -250,6 +250,16 @@ export default function HomePage() {
               icon: "🤖",
               title: "AI Coaching Report",
               desc: "Gemini explains every recommendation in plain english. Get a personalized 5-day study plan with specific problems and reasoning behind each suggestion.",
+            },
+            {
+              icon: "📈",
+              title: "Coverage Gap",
+              desc: "See exactly how many rating points harder peers attempt each topic vs you. A coverage gap of +300 means peers are solving 300 points harder problems in that topic.",
+            },
+            {
+              icon: "🎯",
+              title: "Confidence Score",
+              desc: "Every recommendation comes with a confidence score based on your attempt count, rating spread, and recency. Low confidence = insufficient data, not a guess.",
             },
           ].map((f) => (
             <div
