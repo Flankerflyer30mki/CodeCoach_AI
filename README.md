@@ -222,7 +222,6 @@ codecoach/
 - **300 users sampled per band**
 - **500 submissions fetched per user**
 - **~2.55 million submissions analyzed** to build peer baselines
-- **Biweekly pipeline refresh** via Windows Task Scheduler
 - **15 recommended problems** generated per analysis (5 per top 3 topics)
 - **20+ metrics computed** per topic per user
 
