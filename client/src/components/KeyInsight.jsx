@@ -1,9 +1,10 @@
 import ReactMarkdown from "react-markdown";
 
-export default function CoachingReport({ report }) {
+export default function KeyInsight({ report }) {
   const keyInsightIndex = report.indexOf("## Key Insight");
-  const mainReport =
-    keyInsightIndex !== -1 ? report.slice(0, keyInsightIndex).trim() : report;
+  if (keyInsightIndex === -1) return null;
+
+  const keyInsightContent = report.slice(keyInsightIndex).trim();
 
   return (
     <div
@@ -14,16 +15,16 @@ export default function CoachingReport({ report }) {
       }}
     >
       <p
-        className="text-xs font-semibold uppercase tracking-wide mb-4"
-        style={{ color: "var(--text-muted)" }}
+        className="text-xs font-semibold uppercase tracking-wide mb-3"
+        style={{ color: "var(--blue)" }}
       >
-        Coaching Report
+        Key Insight
       </p>
       <div
         className="prose prose-sm prose-invert max-w-none"
         style={{ color: "var(--text-secondary)" }}
       >
-        <ReactMarkdown>{mainReport}</ReactMarkdown>
+        <ReactMarkdown>{keyInsightContent}</ReactMarkdown>
       </div>
     </div>
   );

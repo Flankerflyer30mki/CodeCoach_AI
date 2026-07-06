@@ -9,20 +9,44 @@ export default function StudyPlan({ weakTopics }) {
 
   return (
     <div>
-      <h3 className="text-sm font-medium text-gray-500 mb-3">
+      <h3
+        className="text-sm font-medium mb-3"
+        style={{ color: "var(--text-secondary)" }}
+      >
         5-Day study plan
       </h3>
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
+      <div
+        className="rounded-xl p-5"
+        style={{
+          backgroundColor: "var(--bg-secondary)",
+          border: "1px solid var(--border)",
+        }}
+      >
         <div className="flex flex-col gap-4">
           {top3.map((topic, index) => (
             <div key={topic.topic}>
-              {index > 0 && <div className="border-t border-gray-100 mb-4" />}
+              {index > 0 && (
+                <div
+                  className="mb-4"
+                  style={{ borderTop: "1px solid var(--border)" }}
+                />
+              )}
               <div className="flex gap-3 items-start">
-                <span className="bg-blue-50 text-blue-700 text-xs px-2 py-1 rounded-md whitespace-nowrap mt-0.5">
+                <span
+                  className="text-xs px-2 py-1 rounded-md whitespace-nowrap mt-0.5 font-medium"
+                  style={{
+                    backgroundColor: "#1e3a5f",
+                    color: "var(--blue)",
+                    border: "1px solid #1d4ed8",
+                  }}
+                >
                   {dayLabels[index]}
                 </span>
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-900 mb-1 capitalize">
+                  <p
+                    className="text-sm font-medium mb-1 capitalize"
+                    style={{ color: "var(--text-primary)" }}
+                  >
                     {topic.topic} — target {topic.recommendedDifficulty}
                   </p>
                   <div className="flex flex-col gap-1">
@@ -32,10 +56,14 @@ export default function StudyPlan({ weakTopics }) {
                         href={p.url}
                         target="_blank"
                         rel="noreferrer"
-                        className="flex justify-between text-sm text-blue-600 hover:text-blue-800"
+                        className="flex justify-between text-sm hover:opacity-80"
+                        style={{ color: "var(--blue)" }}
                       >
                         <span>{p.name}</span>
-                        <span className="text-gray-400 text-xs">
+                        <span
+                          className="text-xs"
+                          style={{ color: "var(--text-muted)" }}
+                        >
                           {p.rating}
                         </span>
                       </a>

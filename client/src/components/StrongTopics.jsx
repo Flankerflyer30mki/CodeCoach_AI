@@ -3,12 +3,22 @@ export default function StrongTopics({ topics }) {
 
   return (
     <div>
-      <h3 className="text-sm font-medium text-gray-500 mb-3">Strong topics</h3>
+      <h3
+        className="text-sm font-medium mb-3"
+        style={{ color: "var(--text-secondary)" }}
+      >
+        Strong topics
+      </h3>
       <div className="flex flex-wrap gap-2">
         {topics.map((topic) => (
           <span
             key={topic.topic}
-            className="bg-green-50 text-green-800 text-sm px-3 py-1.5 rounded-lg"
+            className="text-sm px-3 py-1.5 rounded-lg"
+            style={{
+              backgroundColor: "#0f2d1a",
+              color: "#22c55e",
+              border: "1px solid #14532d",
+            }}
           >
             {topic.topic}
           </span>
