@@ -10,9 +10,10 @@ const useAnalyze = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await axios.post("http://localhost:5000/api/analyze", {
-        handle,
-      });
+      const response = await axios.post(
+        "https://codecoachai-production.up.railway.app/api/analyze",
+        { handle },
+      );
       setResult(response.data);
     } catch (err) {
       setError(err.response?.data?.error || "Something went wrong");
