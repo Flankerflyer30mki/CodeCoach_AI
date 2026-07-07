@@ -1,7 +1,7 @@
 import { connectDb } from "./savetoDB.js";
 import { saveBaseline } from "./savetoDB.js";
 import { getRatedUsers } from "./cfClient.js";
-import { getUserSubmissions } from "./cfClient.js";
+import { getUserSubmissions } from "../shared/cfApi.js";
 import { computeBaseline } from "./computeBaseline.js";
 import config from "./config.js";
 import mongoose from "mongoose";
