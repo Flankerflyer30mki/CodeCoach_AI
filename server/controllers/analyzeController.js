@@ -39,6 +39,7 @@ export const analyzeUser = async (req, res) => {
           recommendations,
         );
       } catch (err) {
+        console.log("Coaching report generation failed:", err.message);
         coachingReport = null;
       }
 
