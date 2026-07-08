@@ -31,6 +31,7 @@ export default function ResultsPage() {
   }
 
   const { handle, rating, rank, recommendations, coachingReport } = result;
+  const isTopRated = rating >= 2400;
   const rankColor = rankColors[rank?.toLowerCase()] || "#94a3b8";
 
   return (
@@ -80,31 +81,52 @@ export default function ResultsPage() {
 
         {/* Coaching Report */}
         <CoachingReport report={coachingReport} />
+        {isTopRated && (
+          <div
+            className="mt-6 rounded-xl p-5"
+            style={{
+              backgroundColor: "var(--bg-secondary)",
+              border: "1px solid var(--border)",
+            }}
+          >
+            <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+              You're in the top tier of Codeforces users. No peer baseline
+              exists above your rating — there's no one left to compare against
+              at this level.
+            </p>
+          </div>
+        )}
 
         {/* Charts */}
-        <div className="mt-8">
-          <PriorityChart weakTopics={recommendations.weakTopics} />
-        </div>
-        <div className="mt-6">
-          <DifficultyChart weakTopics={recommendations.weakTopics} />
-        </div>
+        {!isTopRated && (
+          <>
+            <div className="mt-8">
+              <PriorityChart weakTopics={recommendations.weakTopics} />
+            </div>
+            <div className="mt-6">
+              <DifficultyChart weakTopics={recommendations.weakTopics} />
+            </div>
+          </>
+        )}
 
         {/* Weak Topics */}
-        <div className="mt-8">
-          <h3
-            className="text-sm font-medium mb-3"
-            style={{ color: "var(--text-secondary)" }}
-          >
-            Weak topics — ranked by priority
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {recommendations.weakTopics
-              .filter((t) => t.priority > 0)
-              .map((topic) => (
-                <WeakTopicCard key={topic.topic} topic={topic} />
-              ))}
+        {!isTopRated && (
+          <div className="mt-8">
+            <h3
+              className="text-sm font-medium mb-3"
+              style={{ color: "var(--text-secondary)" }}
+            >
+              Weak topics — ranked by priority
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {recommendations.weakTopics
+                .filter((t) => t.priority > 0)
+                .map((topic) => (
+                  <WeakTopicCard key={topic.topic} topic={topic} />
+                ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Strong Topics */}
         <div className="mt-8">
