@@ -1,7 +1,9 @@
+import Groq from "groq-sdk";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+const geminiModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
 const EXAMPLE_INPUT = `{
   "handle": "cf_example1",
@@ -51,18 +53,18 @@ const EXAMPLE_INPUT = `{
 }`;
 
 const EXAMPLE_OUTPUT = `## Profile Summary
-At 1380, your foundation in greedy, math, and implementation is solid — these are genuinely strong relative to peers targeting 1480-1580. The gap holding you back is not effort but topic coverage. You are actively avoiding DP, attempting graphs only at easy difficulty, and struggling to convert binary search attempts into solutions.
+At 1380, your foundation in greedy, math, and implementation is solid. The gap holding you back is not effort but topic coverage. You are actively avoiding DP, attempting graphs only at easy difficulty, and struggling to convert binary search attempts into solutions.
 
 ## Weak Topics Analysis
 
 **DP (Avoided — Priority 16.4)**
-You have almost no DP attempts compared to peers at your target rating. This is your biggest blindspot. Users who cross 1500 attempt DP 20% of the time — you are nowhere near that. Target: 1500-rated DP problems.
+You have almost no DP attempts compared to peers at your target rating. Target: 1500-rated DP problems.
 
 **Graphs (Underdeveloped — Priority 8.2)**
-You attempt graphs but only at easy difficulty. Peers at 1480-1580 are solving 1400-rated graph problems regularly while you stay at 1000-1200. The skill is there — you just have not pushed the difficulty. Target: 1400-rated graph problems.
+You attempt graphs but only at easy difficulty. Peers are solving 1400-rated graph problems regularly. Target: 1400-rated graph problems.
 
 **Binary Search (Struggling — Priority 5.1)**
-You attempt binary search at appropriate difficulty but your solve rate is significantly below peers. This suggests a conceptual gap. Target: 1300-rated BS problems focusing on binary search on answer pattern.
+You attempt binary search at appropriate difficulty but your solve rate is significantly below peers. Target: 1300-rated BS problems.
 
 ## 5-Day Study Plan
 
@@ -88,7 +90,7 @@ You attempt binary search at appropriate difficulty but your solve rate is signi
 - [BS problem 5](https://codeforces.com/problemset/problem/27/A) — 1200
 
 ## Key Insight
-Start DP today. It is your highest priority by a significant margin and the single topic most responsible for the gap between you and 1500-rated users.`;
+Start DP today. It is your highest priority by a significant margin.`;
 
 const EXAMPLE_INPUT_2 = `{
   "handle": "cf_example2",
@@ -138,18 +140,18 @@ const EXAMPLE_INPUT_2 = `{
 }`;
 
 const EXAMPLE_OUTPUT_2 = `## Profile Summary
-At 1550, your algorithmic thinking is strong — greedy, math, dp, binary search, and constructive algorithms are all performing well relative to peers targeting 1650-1750. The ceiling you are hitting is graph-based topics. You are avoiding trees and DFS almost entirely, and your data structures knowledge stays at easy difficulty. These three topics together account for a significant portion of problems at 1600-1800.
+At 1550, your algorithmic thinking is strong — greedy, math, dp, binary search, and constructive algorithms are all performing well. The ceiling you are hitting is graph-based topics. You are avoiding trees and DFS almost entirely, and your data structures knowledge stays at easy difficulty.
 
 ## Weak Topics Analysis
 
 **Trees (Avoided — Priority 12.3)**
-Your tree attempt ratio is far below peers at your target rating. Users at 1650-1750 solve trees regularly at 1700-1800 difficulty. You have barely touched them. This is a critical gap at your rating — almost every div2 D problem at 1700+ involves trees in some form. Target: start at 1700-rated tree problems.
+Your tree attempt ratio is far below peers. Users at 1650-1750 solve trees regularly at 1700-1800 difficulty. Target: 1700-rated tree problems.
 
 **DFS and Similar (Avoided — Priority 9.1)**
-Same pattern as trees — very low attempt count relative to peers. DFS is foundational for graphs, trees, and connected component problems. Avoiding it means you are blocking progress in multiple related topics simultaneously. Target: 1700-rated DFS problems.
+Same pattern as trees — very low attempt count relative to peers. Target: 1700-rated DFS problems.
 
 **Data Structures (Underdeveloped — Priority 6.8)**
-You attempt data structures but stay at easy difficulty. Peers at your target rating are using segment trees, BITs, and sparse tables at 1700+. Your data structures knowledge is real but shallow. Target: 1700-rated DS problems.
+You attempt data structures but stay at easy difficulty. Target: 1700-rated DS problems.
 
 ## 5-Day Study Plan
 
@@ -160,14 +162,14 @@ You attempt data structures but stay at easy difficulty. Peers at your target ra
 - [Tree problem 4](https://codeforces.com/problemset/problem/33/A) — 1900
 - [Tree problem 5](https://codeforces.com/problemset/problem/34/A) — 1700
 
-**Day 3-4: DFS and Similar (foundational for graphs)**
+**Day 3-4: DFS and Similar**
 - [DFS problem 1](https://codeforces.com/problemset/problem/35/A) — 1600
 - [DFS problem 2](https://codeforces.com/problemset/problem/36/A) — 1700
 - [DFS problem 3](https://codeforces.com/problemset/problem/37/A) — 1800
 - [DFS problem 4](https://codeforces.com/problemset/problem/38/A) — 1600
 - [DFS problem 5](https://codeforces.com/problemset/problem/39/A) — 1700
 
-**Day 5: Data Structures (push the difficulty)**
+**Day 5: Data Structures**
 - [DS problem 1](https://codeforces.com/problemset/problem/40/A) — 1600
 - [DS problem 2](https://codeforces.com/problemset/problem/41/A) — 1800
 - [DS problem 3](https://codeforces.com/problemset/problem/42/A) — 1700
@@ -175,9 +177,9 @@ You attempt data structures but stay at easy difficulty. Peers at your target ra
 - [DS problem 5](https://codeforces.com/problemset/problem/44/A) — 1700
 
 ## Key Insight
-Trees and DFS are not optional at 1600+. Every div2 D and E problem at your target rating involves graph traversal in some form. One week of focused tree and DFS practice will unlock an entire class of problems you currently cannot attempt.`;
+Trees and DFS are not optional at 1600+. One week of focused tree and DFS practice will unlock an entire class of problems you currently cannot attempt.`;
 
-export async function generateCoachingReport(handle, rating, recommendations) {
+function buildPrompt(handle, rating, recommendations) {
   const userInput = JSON.stringify(
     {
       handle,
@@ -195,7 +197,7 @@ export async function generateCoachingReport(handle, rating, recommendations) {
     2,
   );
 
-const prompt = `You are an expert competitive programming coach.
+  return `You are an expert competitive programming coach.
 
 Here are two examples of good coaching reports:
 
@@ -224,14 +226,46 @@ Rules:
 - Follow the exact format of the examples above.
 - Only use data provided. Never invent problem names, ratings, or metrics.
 - Use the actual problem names and URLs from recommendedProblems.
-- If a topic has no recommendedProblems, skip listing problems for that day.
 - Be specific — mention topic names, priority scores, recommended difficulties.
 - Be encouraging but honest.
 - Keep total response under 600 words.
 
 OUTPUT:`;
+}
 
-  const result = await model.generateContent(prompt);
-  const response = result.response;
-  return response.text();
+async function tryGroq(prompt) {
+  const completion = await groq.chat.completions.create({
+    messages: [{ role: "user", content: prompt }],
+    model: "llama-3.3-70b-versatile",
+    max_tokens: 1000,
+  });
+  return completion.choices[0]?.message?.content;
+}
+
+async function tryGemini(prompt) {
+  const result = await geminiModel.generateContent(prompt);
+  return result.response.text();
+}
+
+export async function generateCoachingReport(handle, rating, recommendations) {
+  const prompt = buildPrompt(handle, rating, recommendations);
+
+  // try Groq first
+  try {
+    const response = await tryGroq(prompt);
+    if (response) return response;
+  } catch (err) {
+    console.log("Groq failed, trying Gemini:", err.message);
+  }
+
+  // fallback to Gemini
+  try {
+    const response = await tryGemini(prompt);
+    if (response) return response;
+  } catch (err) {
+    console.log("Gemini also failed:", err.message);
+  }
+
+  // both failed
+  return null;
 }
