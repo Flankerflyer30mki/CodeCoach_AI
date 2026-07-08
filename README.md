@@ -1,316 +1,322 @@
 # CodeCoach AI
 
-> Netflix recommends movies. Spotify recommends music. CodeCoach AI recommends what competitive programmers should study next.
+> **Not "what are you bad at" — but what separates you from programmers who already crossed your current rating.**
 
-**CodeCoach AI** is a recommendation system that analyzes a Codeforces user's submission history, compares it against stronger programmers one rating band above, and identifies the highest-ROI topics to improve next — powered by peer baseline analytics and explained by Gemini AI.
+CodeCoach AI is a Codeforces recommendation system that identifies your highest-ROI topics by comparing your submission history against 300+ programmers one rating band above you. The algorithm is the product. The LLM just narrates it.
 
-[![React](https://img.shields.io/badge/React-20232A?style=flat&logo=react&logoColor=61DAFB)](https://reactjs.org/)
-[![Node.js](https://img.shields.io/badge/Node.js-339933?style=flat&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
-[![Express](https://img.shields.io/badge/Express-000000?style=flat&logo=express&logoColor=white)](https://expressjs.com/)
-[![MongoDB](https://img.shields.io/badge/MongoDB-47A248?style=flat&logo=mongodb&logoColor=white)](https://mongodb.com/)
-[![Gemini](https://img.shields.io/badge/Gemini_AI-4285F4?style=flat&logo=google&logoColor=white)](https://ai.google.dev/)
+🔗 **Live Demo:** [code-coach-ai-steel.vercel.app](https://code-coach-ai-steel.vercel.app)
 
 ---
 
-## The Problem
+## What It Does
 
-Most competitive programmers don't know what to practice next.
+Enter your Codeforces handle. In ~30 seconds you get:
 
-A 1400-rated user solves Graph problems at an 80% success rate. Does that mean Graphs are a strength? Not necessarily — maybe they only attempted 10 easy graph problems rated 800-1000 while peers at 1500+ are regularly solving 1400-rated graphs.
-
-Existing tools show you statistics. They tell you your solve rate, your submission count, your rating history. But they don't answer the question that actually matters:
-
-> **"What separates me from programmers who already crossed my current rating?"**
-
-That's the recommendation problem. That's what CodeCoach AI solves.
+- **Weak Topic Analysis** — topics ranked by priority, classified as *avoided*, *underdeveloped*, or *struggling*
+- **Difficulty Targets** — the exact problem rating you should be solving in each weak topic
+- **15 Practice Problems** — 5 curated unsolved CF problems for each of your top 3 weak topics
+- **AI Coaching Report** — Groq (LLaMA 3.3 70B) explains every recommendation and generates a 5-day study plan
+- **Priority Chart** — horizontal bar chart of weak topics by priority score
+- **Difficulty Distribution** — your median problem difficulty vs peers in each topic
 
 ---
 
-## Solution
+## How It Works
 
-CodeCoach AI doesn't ask "what are you bad at." It asks what separates you from programmers who already crossed your ceiling — by comparing your submission history against 300+ programmers one rating band above you.
+### The Core Idea
+
+Most CF analytics tools ask *"what are you bad at?"* CodeCoach asks a different question:
+
+> **What separates you from programmers who already crossed your current rating?**
+
+Your metrics are compared against a peer baseline of 300+ users rated 100–200 points above you. These are the people who solved your stagnation problem. We reverse-engineer what they did differently.
+
+### The Analytics Pipeline
+
+**Step 1 — Temporal Weighting**
+
+Every submission is weighted by age before any computation:
 
 ```
-User enters CF handle
-        ↓
-Codeforces API (submissions + profile)
-        ↓
-Analytics Engine (temporal weighting, per-topic metrics)
-        ↓
-Peer Baseline Comparison (300+ users, one band above)
-        ↓
-Recommendation Engine (gap analysis, classification, priority)
-        ↓
-Gemini AI (explains recommendations, generates study plan)
-        ↓
-Personalized Coaching Report
+w(submission) = e^(-0.005 * age_in_days)
 ```
 
----
+Recent activity matters more. A user who was bad at DP in 2023 but grinded it this month should not be flagged as weak at DP.
 
-## Key Features
+**Step 2 — Per-Topic Metrics (for the user)**
 
-### Peer Baseline Analytics
-Instead of comparing users against absolute metrics, CodeCoach AI compares them against 300+ programmers already one rating band above them. This answers "what do stronger users do differently" rather than "what is this user's raw score."
+For each topic, we compute:
+- `attemptRatio` — weighted attempts in topic / total weighted attempts
+- `solveRate` — weighted solved / weighted attempts
+- `coverage` — p10, p50, p90 of problem ratings attempted
+- `DCR` — difficulty conversion rate per bucket: [0, +100], [+100, +300], [+300+] above user rating
+- `rawAttemptCount` — for confidence calculation
 
-### Temporal Weighting
-Recent submissions carry more weight than old ones using exponential decay: `w = e^(-λt)`. A user who was bad at DP in 2023 but solved 40 DP problems this month shouldn't be flagged as weak at DP.
+**Step 3 — Peer Baseline (offline, precomputed)**
 
-### Coverage Gap
-Detects whether users only solve easy problems inside a topic. A user with 80% solve rate in graphs but only on 800-1000 rated problems has a large coverage gap — peers at the target band are solving 1400+ rated graph problems.
+300+ CF users per rating band, stored in MongoDB Atlas:
+- `peer_attemptRatio` — mean and std
+- `peer_solveRate` — mean and std
+- `peer_coverage` — p10, p50, p90 mean and std
+- `peer_DCR` — per bucket mean and std
 
-### Difficulty Conversion Rate (DCR)
-Measures ability to convert harder problem attempts into accepted solutions, bucketed by difficulty relative to user's rating: [0, +100], [+100, +300], [+300+]. Distinguishes "never attempts hard problems" from "attempts hard problems but fails."
-
-### Confidence Score
-Prevents unreliable recommendations when data is sparse. `confidence = 0.4×C_size + 0.3×C_spread + 0.3×C_recency`. Topics with confidence < 0.3 are classified as "Insufficient Data" rather than guessed at.
-
-### Priority Score
-Ranks topics by: `priority = importance × total_gap × confidence`. Importance = how frequently stronger users attempt this topic. Gap = how far behind the user is. Confidence = how much we trust the data.
-
-### AI Coaching Report
-Gemini AI explains every recommendation in plain English and generates a personalized 5-day study plan with 15 curated unsolved problems. Critically — Gemini **explains** recommendations but **never computes** them. The analytics engine is fully deterministic.
-
----
-
-## Recommendation Pipeline
+**Step 4 — Gap Analysis**
 
 ```
-Submission History (last 500 submissions)
-        ↓
-Temporal Weighting  →  e^(-λ × age_in_days)
-        ↓
-Per-Topic Metrics   →  attempt ratio, solve rate, coverage (p10/p50/p90), DCR
-        ↓
-Peer Comparison     →  fetch precomputed baselines from MongoDB
-        ↓
-Gap Computation     →  attempt gap, success gap, coverage gap, conversion gap
-        ↓
-Confidence Scoring  →  C_size × C_spread × C_recency
-        ↓
-Classification      →  Avoided / Underdeveloped / Struggling / Strong
-        ↓
-Priority Ranking    →  importance × total_gap × confidence
-        ↓
-Problem Matching    →  5 unsolved CF problems per top 3 topics
-        ↓
-Gemini Explanation  →  coaching report + 5-day study plan
+attemptGap    = peer_attemptRatio.mean - user_attemptRatio
+successGap    = peer_solveRate.mean    - user_solveRate
+coverageGap   = peer_p90.mean         - user_p90
+conversionGap = mean(peer_DCR - user_DCR) across buckets
 ```
 
----
+**Step 5 — Confidence Score**
 
-## Analytics Explained
+```
+C_size    = min(attemptCount / 10, 1.0)
+C_spread  = min((p90 - p10) / 600, 1.0)
+C_recency = weightedAttempts / rawAttemptCount
 
-### Attempt Gap
-**Purpose:** Detects topic avoidance relative to stronger peers.
-**Formula:** `attempt_gap = peer_attempt_ratio - user_attempt_ratio`
-**Limitation:** Contest-only users may have skewed attempt distributions.
+confidence = 0.4 * C_size + 0.3 * C_spread + 0.3 * C_recency
+```
 
-### Coverage Gap
-**Purpose:** Detects users stuck at easy difficulty within a topic.
-**Formula:** `coverage_gap = peer_p90_rating - user_p90_rating`
-**Why p90 not max:** One lucky hard problem attempt shouldn't inflate the score. Percentile is robust against outliers.
+Topics with confidence < 0.3 are classified as *Insufficient Data* — not guessed.
 
-### Confidence Score
-**Purpose:** Prevents low-data topics from producing unreliable recommendations.
-**Formula:** `confidence = 0.4×C_size + 0.3×C_spread + 0.3×C_recency`
-**Why weighted average not multiplication:** Multiplication is too punishing — one weak component shouldn't tank the whole score.
+**Step 6 — Classification**
 
-### Priority Score
-**Purpose:** Ranks topics by expected impact on rating improvement.
-**Formula:** `priority = importance × total_gap × confidence`
-- **Importance** = peer attempt ratio (how much do stronger users focus on this topic?)
-- **Total gap** = weighted sum of all four gaps
-- **Confidence** = how much we trust the data
+Thresholds are adaptive: `gap > k * peer_std`
 
-### Difficulty Conversion Rate
-**Purpose:** Distinguishes "never attempts hard problems" from "attempts hard but fails."
-**Formula:** Per difficulty bucket: `DCR = weighted_solved / weighted_attempted`
-**Buckets:** [0, +100], [+100, +300], [+300+] relative to user's current rating.
+| Classification | Condition |
+|---|---|
+| **Avoided** | Low confidence + high attemptGap, OR attemptGap > 1.0 × peer_std |
+| **Underdeveloped** | coverageGap > 0.3 × peer_std AND successGap > -0.1 |
+| **Struggling** | successGap > 1.0 × peer_std |
+| **Strong** | No significant gaps |
+| **Insufficient Data** | confidence < 0.3 |
+
+**Step 7 — Priority Score**
+
+```
+priority = importance × total_gap × confidence
+
+importance = peer_attemptRatio.mean
+total_gap  = 0.25 * attemptGap + 0.25 * successGap + 0.25 * coverageGap + 0.25 * conversionGap
+```
+
+Topics with `priority ≤ 0` (user is ahead of peers) are filtered out. Topics where `peer_attemptRatio < 0.025` (niche topics irrelevant at that rating) are skipped entirely.
+
+**Step 8 — Problem Recommendations**
+
+For the top 3 priority weak topics, 5 unsolved CF problems are fetched at `recommendedDifficulty ± 200`, filtered against the user's solved history.
+
+**Step 9 — LLM Layer**
+
+Structured JSON is sent to Groq (LLaMA 3.3 70B) with two few-shot examples. Gemini 2.5 Flash is used as fallback. The LLM generates a markdown coaching report — it does NOT compute anything. If both APIs fail, analytics and problem recommendations are still shown.
 
 ---
 
 ## Tech Stack
 
 | Layer | Technology |
-|-------|-----------|
-| Frontend | React, Vite, Tailwind CSS v4, Recharts |
+|---|---|
+| Frontend | React, Vite, Tailwind CSS v4, Recharts, react-markdown |
 | Backend | Node.js, Express.js |
-| Database | MongoDB, Mongoose |
-| AI Layer | Google Gemini 2.5 Flash |
-| Data Source | Codeforces Public API |
-| Shared Utilities | Custom math/analytics library |
+| Database | MongoDB Atlas |
+| AI | Groq API (LLaMA 3.3 70B) + Gemini 2.5 Flash fallback |
+| Data Source | Codeforces API (public endpoints, no key required) |
+| Frontend Deploy | Vercel |
+| Backend Deploy | Railway |
 
 ---
 
 ## Architecture
 
 ```
-codecoach/
-├── pipeline/          # Offline data collection (runs periodically)
-│   ├── index.mjs      # Orchestrator — fetches 300 users per rating band
-│   ├── cfClient.js    # Codeforces API communication
-│   ├── computeBaseline.js  # Peer baseline metric computation
-│   └── saveToDb.js    # MongoDB persistence
-│
-├── server/            # Express backend
-│   ├── routes/        # API route definitions
-│   ├── controllers/   # Request handlers
-│   ├── models/        # MongoDB schemas
-│   └── services/
-│       ├── analyticsEngine.js      # Per-user metric computation
-│       ├── recommendationEngine.js # Gap analysis, classification, priority
-│       ├── cfService.js            # CF API re-export layer
-│       └── llmService.js           # Gemini API integration
-│
-├── client/            # React frontend
-│   └── src/
-│       ├── pages/     # HomePage, ResultsPage
-│       ├── components/# CoachingReport, WeakTopicCard, Charts, etc.
-│       └── hooks/     # useAnalyze (API call logic)
-│
-└── shared/            # Shared utilities (imported by both pipeline and server)
-    ├── mathUtils.js   # getWeight, getPercentile, getMean, getStd
-    ├── dcrUtils.js    # getDcrBucket
-    └── cfApi.js       # getUserInfo, getUserSubmissions, getProblemsForTopic
+React (Vercel)
+      │
+      ▼
+Express API (Railway)
+      │
+      ├──► MongoDB Atlas     ← peer baseline data
+      ├──► Codeforces API    ← user submissions + problems
+      ├──► Analytics Engine  ← temporal weighting, gaps, confidence
+      │         │
+      │         ▼
+      │    Recommendation Engine
+      │         │
+      │         ▼
+      └──► Groq API → Gemini (fallback)
+                  │
+                  ▼
+          Coaching Report (markdown)
 ```
 
 ---
 
-## Design Decisions
+## Project Structure
 
-### Offline Peer Baselines
-**Decision:** Precompute peer baselines offline, store in MongoDB.
-**Reason:** Fetching 300 users' submissions per user request would take minutes and hammer the CF API. Offline computation runs once per 2 weeks.
-
-### Shared Utilities
-**Decision:** All analytics formulas live in `shared/` and are imported by both pipeline and server.
-**Reason:** One implementation means one place to update. If lambda changes, both the pipeline and server update automatically.
-
-### Stateless API
-**Decision:** No authentication in v1.
-**Reason:** Codeforces profiles are public. Any handle can be analyzed without login. Keeps the architecture simple and the demo frictionless.
-
-### LLM as Presentation Layer
-**Decision:** Gemini receives structured JSON and explains it. It never computes anything.
-**Reason:** If the analytics are wrong, Gemini produces eloquent nonsense. Analytics must be verified first. Gemini is the narrator, not the brain.
-
-### Adaptive Thresholds
-**Decision:** Classification thresholds use `gap > k × peer_std` instead of hardcoded values.
-**Reason:** A 200-point coverage gap means something very different at 800 rating vs 2000 rating. Standard deviation-based thresholds adapt to the actual data distribution.
-
-### Exponential Decay for Temporal Weighting
-**Decision:** `w = e^(-λt)` instead of discrete buckets.
-**Reason:** Discrete buckets create artificial discontinuities (89 days = full weight, 90 days = 70% weight). Exponential decay is smooth and mathematically principled.
-
----
-
-## Tradeoffs & Known Limitations
-
-- **No authentication** — v1 is stateless. No history, no progress tracking across sessions.
-- **500-submission window** — Very active users (1000+ submissions) may have their older history cut off, missing some solved problems from the filter.
-- **Virtual contest submissions** — CF API's `user.status` endpoint doesn't reliably return virtual contest submissions.
-- **Peer baseline sample size** — 300 users per band produces std values that are sometimes too large, making adaptive thresholds loose. 1000+ users per band would significantly tighten classifications.
-- **Solve rate signal weakness** — Users who test locally before submitting have inflated solve rates. Mitigated by weighting attempt ratio and coverage gap more heavily.
-- **Topic independence assumption** — The system treats topics independently. In reality, graphs → trees → LCA are dependent. Modeled as v2.
-
----
-
-## Project Stats
-
-- **17 rating bands** (800 to 2400+)
-- **300 users sampled per band**
-- **500 submissions fetched per user**
-- **~2.55 million submissions analyzed** to build peer baselines
-- **15 recommended problems** generated per analysis (5 per top 3 topics)
-- **20+ metrics computed** per topic per user
+```
+codecoach/
+  pipeline/          ← offline peer baseline data collection
+    index.mjs        ← orchestrator with biweekly refresh logic
+    cfClient.js      ← CF API: user.ratedList
+    computeBaseline.js
+    saveToDb.js
+    config.js        ← all tunable constants
+  server/            ← Express backend
+    index.js
+    routes/
+    controllers/
+      analyzeController.js
+    models/
+      peerBaseline.js
+    services/
+      analyticsEngine.js       ← per-user metric computation
+      recommendationEngine.js  ← gap analysis, classification, priority
+      cfService.js             ← CF API re-exports
+      llmService.js            ← Groq + Gemini with fallback
+  client/            ← React frontend
+    src/
+      pages/
+        HomePage.jsx
+        ResultsPage.jsx
+      components/
+        CoachingReport.jsx
+        WeakTopicCard.jsx
+        StrongTopics.jsx
+        StudyPlan.jsx
+        KeyInsight.jsx
+        charts/
+          PriorityChart.jsx
+          DifficultyChart.jsx
+      hooks/
+        useAnalyze.js
+  shared/            ← shared utilities used by pipeline and server
+    mathUtils.js     ← getWeight, getPercentile, getMean, getStd
+    dcrUtils.js      ← getDcrBucket
+    cfApi.js         ← getUserInfo, getUserSubmissions, getProblemsForTopic
+```
 
 ---
 
-## Future Work
-
-- **Authentication + progress tracking** — Save recommendation history, track whether users solved recommended problems
-- **Topic dependency graph** — Model prerequisite relationships (DFS → Trees → LCA)
-- **Contest-aware analytics** — Detect upsolving patterns, weight contest submissions differently
-- **Adaptive peer bands** — Dynamic band width based on rating distribution density
-- **First-attempt solve rate** — Use first submission verdict instead of overall solve rate to remove careful-submission bias
-- **"Underperforming" classification** — Catch topics where user has good attempt volume but significantly below-peer solve rate
-
----
-
-## Local Setup
+## Running Locally
 
 ### Prerequisites
+
 - Node.js v18+
 - MongoDB (local) or MongoDB Atlas
-- Gemini API key (from [Google AI Studio](https://aistudio.google.com))
-- Codeforces API (no key needed for public endpoints)
+- Groq API key (free at console.groq.com)
+- Gemini API key (free at aistudio.google.com) — optional fallback
 
-### 1. Clone the repository
+### 1. Clone the repo
+
 ```bash
 git clone https://github.com/Flankerflyer30mki/CodeCoach_AI.git
 cd CodeCoach_AI
 ```
 
-### 2. Install root dependencies (for shared/ utilities)
+### 2. Install root dependencies (for shared/)
+
 ```bash
 npm install
 ```
 
-### 3. Run the data pipeline (builds peer baselines — takes ~90 minutes)
+### 3. Set up the pipeline
+
 ```bash
 cd pipeline
 npm install
-# Create .env with MONGO_URI, CF_API_BASE, RATE_LIMIT_MS
+```
+
+Create `pipeline/.env`:
+
+```
+MONGO_URI=mongodb://localhost:27017/codecoach
+CF_API_BASE=https://codeforces.com/api
+RATE_LIMIT_MS=2000
+```
+
+Run the pipeline to populate peer baseline data (~1.5 hours):
+
+```bash
 node index.mjs
 ```
 
-### 4. Start the server
+### 4. Set up the server
+
 ```bash
-cd server
+cd ../server
 npm install
-# Create .env with MONGO_URI, CF_API_BASE, PORT, GEMINI_API_KEY
+```
+
+Create `server/.env`:
+
+```
+MONGO_URI=mongodb://localhost:27017/codecoach
+CF_API_BASE=https://codeforces.com/api
+PORT=5000
+GROQ_API_KEY=your_groq_key_here
+GEMINI_API_KEY=your_gemini_key_here
+```
+
+Start the server:
+
+```bash
 node index.js
 ```
 
-### 5. Start the frontend
+### 5. Set up the client
+
 ```bash
-cd client
+cd ../client
 npm install
 npm run dev
 ```
 
-Open `http://localhost:5173` and enter any Codeforces handle.
+Open `http://localhost:5173`
 
 ---
 
-## Why This Project Exists
+## Key Design Decisions
 
-I built CodeCoach AI because I couldn't find a tool that answered the question I actually cared about.
-
-Every existing Codeforces analytics tool shows you your statistics. Solve rates, submission counts, rating graphs. They tell you what happened. None of them tell you what to do next.
-
-The insight that drove this project: **the question isn't "what am I bad at" — it's "what do users who already crossed my rating ceiling do differently."**
-
-That reframing turns a statistics problem into a recommendation problem. And recommendation systems have a well-understood engineering approach: collect data on the target state, compute the gap between current state and target state, rank gaps by importance, and present the highest-impact actions.
-
-That's exactly what CodeCoach AI does — applied to competitive programming.
-
----
-
-## Credits
-
-- [Codeforces](https://codeforces.com) — Public API for user submissions and problem data
-- [Google Gemini](https://ai.google.dev) — AI explanation layer
-- [Recharts](https://recharts.org) — React charting library
-- [Tailwind CSS](https://tailwindcss.com) — Styling
+| Decision | Rationale |
+|---|---|
+| Peer group is X+100 to X+200 | Closer target = more actionable. Users 200+ points above have diverged too much in topic mix. |
+| Exponential decay over discrete temporal buckets | No discontinuity at day boundaries. 89 days and 90 days should not be treated differently. |
+| p10/p50/p90 for coverage, not just p90 | Same p90 can hide very different distributions. [800,800,800,1600] vs [1100,1200,1300,1400] need to be distinguishable. |
+| Weighted average for confidence, not multiplication | 0.9 × 0.9 × 0.2 = 0.162 is too punishing when two of three components are strong. |
+| Adaptive thresholds using peer_std | A 200-point coverage gap means something different at 800 vs 1800. |
+| All thresholds in config.js | Tune once, affects everything. No hunting through files. |
+| LLM is presentation layer only | If analytics are wrong, LLM produces eloquent nonsense. Verify analytics first, narrate last. |
+| Groq primary + Gemini fallback | Groq free tier = 14,400 req/day vs Gemini's 20. Gemini catches overflow. |
+| Importance filter at 0.025 | Topics where peers spend less than 2.5% of their time are irrelevant at that rating. Removes noise like ternary search, 2-sat, expression parsing for most users. |
 
 ---
 
-## License
+## Known Limitations
 
-MIT — feel free to fork, extend, and improve.
+- Peer baseline has ~300 users per band — std values are loose, thresholds are approximate
+- solvedSet covers only last 500 submissions — very old solved problems may reappear as recommendations
+- Virtual contest submissions don't appear in CF API user.status
+- Solve rate signal is weak due to careful local testing before submitting (inflates solve rates)
+- Topic dependencies not modeled (improving graphs does not automatically flag trees as lower priority)
+- No auth — stateless, no history tracking
 
 ---
 
-*Built by [Siddharth](https://github.com/Flankerflyer30mki) · [Codeforces](https://codeforces.com/profile/siddharth1119sid)*
+## Interview Narrative
+
+This is not "an app that uses an LLM." This is a **recommendation system** whose outputs are explained by an LLM.
+
+Netflix recommends movies. Spotify recommends songs. CodeCoach recommends **learning investments**.
+
+Every metric has a design note: what it measures, why it exists, what its limitation is. The algorithm is explainable at every step. The LLM is a presentation layer, not the product.
+
+---
+
+## Built By
+
+**Siddharth** — CS student at Maharaja Agrasen Institute of Technology
+Founder of a 400+ member competitive programming community on campus
+
+- GitHub: [Flankerflyer30mki](https://github.com/Flankerflyer30mki)
+- Codeforces: [siddharth1119sid](https://codeforces.com/profile/siddharth1119sid)
