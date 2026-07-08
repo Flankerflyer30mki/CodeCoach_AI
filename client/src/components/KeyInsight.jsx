@@ -1,8 +1,14 @@
 import ReactMarkdown from "react-markdown";
 
 export default function KeyInsight({ report }) {
+  if (!report) {
+    return null;
+  }
+
   const keyInsightIndex = report.indexOf("## Key Insight");
-  if (keyInsightIndex === -1) return null;
+  if (keyInsightIndex === -1) {
+    return null;
+  }
 
   const keyInsightContent = report.slice(keyInsightIndex).trim();
 
@@ -20,6 +26,7 @@ export default function KeyInsight({ report }) {
       >
         Key Insight
       </p>
+
       <div
         className="prose prose-sm prose-invert max-w-none"
         style={{ color: "var(--text-secondary)" }}
