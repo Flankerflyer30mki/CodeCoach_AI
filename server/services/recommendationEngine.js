@@ -1,153 +1,72 @@
-import PeerBaseline from "../models/peerBaseline.js";
-import { getMean } from "../../shared/mathUtils.js";
-import config from "../../pipeline/config.js";
-import { getProblemsForTopic } from "./cfService.js";
-const getPeerBaseline = async (userRating) => {
-    const userBandMin = Math.floor(userRating / 100) * 100;
-  const bandMin = userBandMin + 100;
-  const bandMax = userBandMin + 200;
-  const results = await PeerBaseline.find({ bandMin, bandMax });
-  return results;
-};
+import PeerBaseline, { BaselineMeta } from "../models/peerBaseline.js";
+import { getPeerBand } from "../../shared/bands.js";
+import { scoreTopics } from "./scoring.js";
+import { getProblemCatalogue } from "./cfService.js";
 
-const computeConfidence = (userTopicMetrics) => {
-  const c_size = Math.min(userTopicMetrics.attemptCount / 10, 1.0);
-  const c_spread = Math.min(
-    (userTopicMetrics.coverage.p90 - userTopicMetrics.coverage.p10) / 600,
-    1.0,
-  );
-  const c_recency =
-    userTopicMetrics.attemptCount / userTopicMetrics.rawAttemptCount;
-  const confidence = 0.4 * c_size + 0.3 * c_spread + 0.3 * c_recency;
-  return confidence;
-};
+export class BaselineUnavailableError extends Error {}
 
-const computeGaps = (userTopicMetrics, peerTopicBaseline) => {
-  const attemptGap =
-    peerTopicBaseline.metrics.attemptRatio.mean - userTopicMetrics.attemptRatio;
-  const successGap =
-    peerTopicBaseline.metrics.solveRate.mean - userTopicMetrics.solveRate;
-  const coverageGap =
-    peerTopicBaseline.metrics.coverage.p90.mean - userTopicMetrics.coverage.p90;
-  const dcrGap0_100 =
-    peerTopicBaseline.metrics.dcr.bucket0_100.mean -
-    userTopicMetrics.dcr.bucket0_100;
-  const dcrGap100_300 =
-    peerTopicBaseline.metrics.dcr.bucket100_300.mean -
-    userTopicMetrics.dcr.bucket100_300;
-  const dcrGap300plus =
-    peerTopicBaseline.metrics.dcr.bucket300plus.mean -
-    userTopicMetrics.dcr.bucket300plus;
-  const conversionGap = (dcrGap0_100 + dcrGap100_300 + dcrGap300plus) / 3;
-  return {
-    attemptGap,
-    successGap,
-    coverageGap,
-    conversionGap,
-  };
-};
-
-const classify = (gaps, confidence, peerTopicBaseline) => {
-  if (confidence < 0.3) {
-    if (gaps.attemptGap > 0.02) {
-      return "avoided";
-    }
-    return "insufficient_data";
-  } else if (
-    gaps.attemptGap >
-    1.0 * peerTopicBaseline.metrics.attemptRatio.std
-  ) {
-    return "avoided";
-  } else if (
-    gaps.coverageGap > 0.3 * peerTopicBaseline.metrics.coverage.p90.std &&
-    gaps.successGap > -0.1
-  ) {
-    return "underdeveloped";
-  } else if (gaps.successGap > 1.0 * peerTopicBaseline.metrics.solveRate.std) {
-    return "struggling";
-  } else {
-    return "strong";
+const loadBaseline = async (bandKey) => {
+  const meta = await BaselineMeta.findById("current").lean();
+  if (!meta) throw new BaselineUnavailableError("No baseline has been published yet");
+  const docs = await PeerBaseline.find({ version: meta.version, bandKey }).lean();
+  if (docs.length === 0) {
+    throw new BaselineUnavailableError(`No baseline for band ${bandKey} in version ${meta.version}`);
   }
+  return { docs, version: meta.version, computedAt: meta.computedAt, userCount: docs[0].userCount };
 };
 
-const computePriority = (gaps, confidence, peerTopicBaseline) => {
-  const importance = peerTopicBaseline.metrics.attemptRatio.mean;
-  const total_gap =
-    0.25 * gaps.attemptGap +
-    0.25 * gaps.successGap +
-    0.25 * gaps.coverageGap +
-    0.25 * gaps.conversionGap;
-  const priority = importance * total_gap * confidence;
-  return { importance, total_gap, priority };
-};
-
-const getRecommendations = async (userMetrics, userRating,solvedSet) => {
-  const peerBaseline = await getPeerBaseline(userRating);
-  const baselineByTopic = {};
-  for (const doc of peerBaseline) {
-    baselineByTopic[doc.topic] = doc;
-  }
-  const results = [];
-
-  for (const topic in userMetrics) {
-    const userTopicMetrics = userMetrics[topic];
-    const peerTopicBaseline = baselineByTopic[topic];
-
-    if (!peerTopicBaseline) {
-      continue;
-    }
-    if(peerTopicBaseline.metrics.attemptRatio.mean < config.minImportanceThreshold){
-    continue;
-    }
-    const confidence = computeConfidence(userTopicMetrics);
-    const gaps = computeGaps(userTopicMetrics, peerTopicBaseline);
-    const classification = classify(gaps, confidence, peerTopicBaseline);
-    const { priority } = computePriority(gaps, confidence, peerTopicBaseline);
-
-    results.push({
-      topic,
-      classification,
-      priority,
-      confidence,
-      gaps,
-      recommendedDifficulty: Math.round(peerTopicBaseline.metrics.coverage.p50.mean / 100) * 100,
+// 5 unsolved problems closest to the target rating (ties: more solved = better vetted)
+const pickProblems = (catalogue, topic, target, solvedSet, used) =>
+  catalogue
+    .filter(
+      (p) =>
+        p.tags.includes(topic) &&
+        Math.abs(p.rating - target) <= 200 &&
+        !solvedSet.has(p.key) &&
+        !used.has(p.key),
+    )
+    .sort(
+      (a, b) =>
+        Math.abs(a.rating - target) - Math.abs(b.rating - target) ||
+        b.solvedCount - a.solvedCount,
+    )
+    .slice(0, 5)
+    .map((p) => {
+      used.add(p.key);
+      return {
+        name: p.name,
+        contestId: p.contestId,
+        index: p.index,
+        rating: p.rating,
+        url: `https://codeforces.com/problemset/problem/${p.contestId}/${p.index}`,
+      };
     });
-  }
-  results.sort((a, b) => b.priority - a.priority);
-  const weakTopics = results.filter(
-    (r) =>
-      r.classification === "avoided" ||
-      r.classification === "underdeveloped" ||
-      r.classification === "struggling",
-  );
-  const strongTopics = results.filter((r) => r.classification === "strong");
-  const insufficientData = results.filter(
-    (r) => r.classification === "insufficient_data",
-  );
-  const top3 = weakTopics.slice(0, 3);
 
-    for(const weakTopic of top3){
-        const problems = await getProblemsForTopic(weakTopic.topic, weakTopic.recommendedDifficulty);
-        
-        const unsolved = problems.filter(p => 
-            !solvedSet.has(`${p.contestId}-${p.index}`)
-        );
-        
-        weakTopic.recommendedProblems = unsolved.slice(0, 5).map(p => ({
-            name: p.name,
-            contestId: p.contestId,
-            index: p.index,
-            rating: p.rating,
-            url: `https://codeforces.com/problemset/problem/${p.contestId}/${p.index}`
-        }));
-    }
-  
+// Caller must make sure the user has a peer band (see getPeerBand).
+export const getRecommendations = async (userTopics, userRating, solvedSet) => {
+  const band = getPeerBand(userRating);
+  const baseline = await loadBaseline(band.key);
+  const result = scoreTopics(userTopics, baseline.docs);
+
+  const catalogue = await getProblemCatalogue();
+  const used = new Set();
+  for (const topic of result.weakTopics.slice(0, 3)) {
+    topic.recommendedProblems = pickProblems(
+      catalogue,
+      topic.topic,
+      topic.recommendedDifficulty,
+      solvedSet,
+      used,
+    );
+  }
 
   return {
-    weakTopics,
-    strongTopics,
-    insufficientData,
+    ...result,
+    baseline: {
+      band: band.key,
+      version: baseline.version,
+      computedAt: baseline.computedAt,
+      peerCount: baseline.userCount,
+    },
   };
 };
-
-export { getRecommendations };

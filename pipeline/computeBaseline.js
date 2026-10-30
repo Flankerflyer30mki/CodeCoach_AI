@@ -1,114 +1,38 @@
-import { getWeight, getPercentile, getMean, getStd } from "../shared/mathUtils.js";
-import { getDcrBucket } from "../shared/dcrUtils.js";
+import { getMean, getStd } from "../shared/mathUtils.js";
 
-const computeBaseline = (usersSubmissions, userRatings) => {
-  const allUserstopicData = {};
-  for (let i = 0; i < usersSubmissions.length; i++) {
-    const userRating = userRatings[i];
-    const userSubmissions = usersSubmissions[i];
-    const topicData = {};
-    let totalWeightedAttempts = 0;
-    for (let j = 0; j < userSubmissions.length; j++) {
-      const submission = userSubmissions[j];
-      const weight = getWeight(submission.creationTimeSeconds);
-      const rating = submission.problem.rating;
-      const tags = submission.problem.tags;
-      const solved = submission.verdict === "OK";
-      if (!rating) {
-        continue;
-      }
-      totalWeightedAttempts += weight;
-      for (let k = 0; k < tags.length; k++) {
-        const tag = tags[k];
-        if (!topicData[tag]) {
-          topicData[tag] = {
-            weightedAttempts: 0,
-            weightedSolved: 0,
-            ratings: [],
-            dcr: {
-              bucket0_100: { attempted: 0, solved: 0 },
-              bucket100_300: { attempted: 0, solved: 0 },
-              bucket300plus: { attempted: 0, solved: 0 },
-            },
-          };
-        }
-        topicData[tag].weightedAttempts += weight;
-        if (solved) {
-          topicData[tag].weightedSolved += weight;
-        }
-        topicData[tag].ratings.push(rating);
-        const diffGap = rating - userRating;
-        const bucket= getDcrBucket(diffGap);
-        if(bucket){
-          topicData[tag].dcr[bucket].attempted+=weight;
-          if(solved){
-            topicData[tag].dcr[bucket].solved+=weight;
-          }
-        }
-      }
-    }
-    for (const tag in topicData) {
-      const attemptRatio =
-        topicData[tag].weightedAttempts / totalWeightedAttempts;
-      const solveRate =
-        topicData[tag].weightedSolved / topicData[tag].weightedAttempts;
-      const ratings = topicData[tag].ratings;
-      if (!allUserstopicData[tag]) {
-        allUserstopicData[tag] = [];
-      }
-      allUserstopicData[tag].push({
-        attemptRatio,
-        solveRate,
-        ratings,
-        dcr: topicData[tag].dcr,
-      });
-    }
-  }
+const stat = (values) => ({
+  mean: getMean(values),
+  std: getStd(values),
+  n: values.length,
+});
+
+const BUCKETS = ["bucket0_100", "bucket100_300", "bucket300plus"];
+
+// peerProfiles: one `topics` object (from computeMetrics) per peer.
+// Every peer here already passed the history-size gate, so a peer with no entry
+// for a topic really did skip it -> counts as attemptRatio 0 (a true zero).
+// Every other metric is undefined for such a peer, so it is left out (not zero-filled).
+export const computeBaseline = (peerProfiles) => {
+  const allTopics = new Set(peerProfiles.flatMap((p) => Object.keys(p)));
   const baseline = {};
-  for (const tag in allUserstopicData) {
-    const users = allUserstopicData[tag];
-    const attemptRatios = users.map((u) => u.attemptRatio);
-    const solveRates = users.map((u) => u.solveRate);
-    const p10s = users.map((u) => getPercentile(u.ratings, 10));
-    const p50s = users.map((u) => getPercentile(u.ratings, 50));
-    const p90s = users.map((u) => getPercentile(u.ratings, 90));
-    const dcr0_100 = users.map((u) =>
-      u.dcr.bucket0_100.attempted > 0
-        ? u.dcr.bucket0_100.solved / u.dcr.bucket0_100.attempted
-        : 0,
-    );
-    const dcr100_300 = users.map((u) =>
-      u.dcr.bucket100_300.attempted > 0
-        ? u.dcr.bucket100_300.solved / u.dcr.bucket100_300.attempted
-        : 0,
-    );
-    const dcr300plus = users.map((u) =>
-      u.dcr.bucket300plus.attempted > 0
-        ? u.dcr.bucket300plus.solved / u.dcr.bucket300plus.attempted
-        : 0,
-    );
-    baseline[tag] = {
-      attemptRatio: {
-        mean: getMean(attemptRatios),
-        std: getStd(attemptRatios),
-      },
-      solveRate: {
-        mean: getMean(solveRates),
-        std: getStd(solveRates),
-      },
+
+  for (const topic of allTopics) {
+    const attempters = peerProfiles.map((p) => p[topic]).filter(Boolean);
+    const dcr = {};
+    for (const b of BUCKETS) {
+      dcr[b] = stat(attempters.map((t) => t.dcr[b]).filter((v) => v !== null));
+    }
+    baseline[topic] = {
+      attempters: attempters.length,
+      attemptRatio: stat(peerProfiles.map((p) => p[topic]?.attemptRatio ?? 0)),
+      solveRate: stat(attempters.map((t) => t.solveRate)),
       coverage: {
-        p10: { mean: getMean(p10s), std: getStd(p10s) },
-        p50: { mean: getMean(p50s), std: getStd(p50s) },
-        p90: { mean: getMean(p90s), std: getStd(p90s) },
+        p10: stat(attempters.map((t) => t.coverage.p10)),
+        p50: stat(attempters.map((t) => t.coverage.p50)),
+        p90: stat(attempters.map((t) => t.coverage.p90)),
       },
-      dcr: {
-        bucket0_100: { mean: getMean(dcr0_100), std: getStd(dcr0_100) },
-        bucket100_300: { mean: getMean(dcr100_300), std: getStd(dcr100_300) },
-        bucket300plus: { mean: getMean(dcr300plus), std: getStd(dcr300plus) },
-      },
+      dcr,
     };
   }
   return baseline;
 };
-
-export { computeBaseline };

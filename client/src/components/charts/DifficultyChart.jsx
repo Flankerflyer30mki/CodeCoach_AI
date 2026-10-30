@@ -9,17 +9,22 @@ import {
 } from "recharts";
 
 export default function DifficultyChart({ weakTopics }) {
-  const data = weakTopics
-    .filter((t) => t.priority > 0 && t.recommendedDifficulty)
+  const data = (weakTopics ?? [])
+    .filter((t) => t.priority > 0)
     .slice(0, 10)
     .map((t) => ({
       topic: t.topic,
-      you: t.gaps
-        ? Math.round(t.recommendedDifficulty - t.gaps.coverageGap)
-        : t.recommendedDifficulty,
-      peers: t.recommendedDifficulty,
+      you: t.userMedianRating, // null when the user never attempted the topic
+      peers: t.peerMedianRating,
     }))
     .reverse();
+
+  if (data.length === 0) return null;
+
+  const summary = [...data]
+    .reverse()
+    .map((d) => `${d.topic}: you ${d.you ?? "never attempted"}, peers ${d.peers}`)
+    .join("; ");
 
   return (
     <div
@@ -36,14 +41,20 @@ export default function DifficultyChart({ weakTopics }) {
         Difficulty distribution
       </p>
       <p className="text-xs mb-4" style={{ color: "var(--text-muted)" }}>
-        Your median problem difficulty vs peers in each weak topic
+        Median rating of the problems you attempt vs peers, per weak topic. Topics you
+        have never attempted have no "You" bar.
       </p>
-      <ResponsiveContainer width="100%" height={320}>
-        <BarChart data={data} layout="vertical" margin={{ left: 80 }}>
+      <p className="sr-only">Median attempted problem rating: {summary}</p>
+      <div aria-hidden="true">
+      <ResponsiveContainer width="100%" height={Math.max(180, data.length * 44 + 80)}>
+        <BarChart data={data} layout="vertical" margin={{ left: 80 }} accessibilityLayer={false}>
           <XAxis
             type="number"
-            domain={[800, 2200]}
-            tick={{ fontSize: 12, fill: "#475569" }}
+            domain={[
+              (min) => Math.floor((min - 100) / 100) * 100,
+              (max) => Math.ceil((max + 100) / 100) * 100,
+            ]}
+            tick={{ fontSize: 12, fill: "#8b9ab0" }}
             axisLine={{ stroke: "#334155" }}
             tickLine={{ stroke: "#334155" }}
           />
@@ -56,6 +67,7 @@ export default function DifficultyChart({ weakTopics }) {
             tickLine={false}
           />
           <Tooltip
+            formatter={(value) => (value == null ? "never attempted" : value)}
             contentStyle={{
               backgroundColor: "#1e293b",
               border: "1px solid #334155",
@@ -68,12 +80,13 @@ export default function DifficultyChart({ weakTopics }) {
           <Bar dataKey="you" name="You" fill="#3b82f6" radius={[0, 4, 4, 0]} />
           <Bar
             dataKey="peers"
-            name="Peers"
+            name="Peers'"
             fill="#334155"
             radius={[0, 4, 4, 0]}
           />
         </BarChart>
       </ResponsiveContainer>
+      </div>
     </div>
   );
 }
