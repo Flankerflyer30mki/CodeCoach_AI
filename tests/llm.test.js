@@ -1,6 +1,6 @@
-import test from "node:test";
+import test, { mock } from "node:test";
 import assert from "node:assert/strict";
-import { generateCoachingReport } from "../server/services/llmService.js";
+import { generateCoachingReport, groqRequestExtras, GROQ_DEFAULT_MODEL, GEMINI_DEFAULT_MODEL } from "../server/services/llmService.js";
 import { recs } from "./report.test.js";
 
 let n = 0;
@@ -92,4 +92,62 @@ test("provider concurrency is capped: extra callers skip the provider instead of
   assert.equal(started, 3);
   assert.equal(results.filter((r) => r.source === "ai").length, 3);
   assert.equal(results.filter((r) => r.source === "template").length, 3); // still got a full report
+});
+
+// ---------- model configuration ----------
+test("default Groq model is one regular accounts can use, not the retired Llama 3.3 70B", () => {
+  assert.equal(GROQ_DEFAULT_MODEL, "openai/gpt-oss-120b");
+  assert.ok(!/llama/i.test(GROQ_DEFAULT_MODEL));
+  assert.ok(GEMINI_DEFAULT_MODEL.startsWith("gemini-"));
+});
+
+test("reasoning options go only to gpt-oss models (other models would reject them)", () => {
+  assert.deepEqual(groqRequestExtras("openai/gpt-oss-120b"), { reasoning_effort: "low", include_reasoning: false });
+  assert.deepEqual(groqRequestExtras("openai/gpt-oss-20b"), { reasoning_effort: "low", include_reasoning: false });
+  assert.deepEqual(groqRequestExtras("llama-3.3-70b-versatile"), {});
+  assert.deepEqual(groqRequestExtras("qwen/qwen3-32b"), {});
+});
+
+// ---------- every way of not getting an answer is logged with a reason ----------
+const captureWarnings = async (run) => {
+  const warn = mock.method(console, "warn", () => {});
+  try {
+    await run();
+    return warn.mock.calls.map((c) => c.arguments.join(" "));
+  } finally {
+    warn.mock.restore();
+  }
+};
+
+test("a provider without a key logs that it was skipped", async () => {
+  const noKey = { name: "nokey-test", available: () => false, call: async () => goodJson };
+  const logs = await captureWarnings(() => generateCoachingReport(1250, recs(), [noKey]));
+  assert.ok(logs.some((l) => l.includes("nokey-test: skipped (no API key set)")));
+});
+
+test("a reply that is not JSON logs its length and start (e.g. a cut-off answer)", async () => {
+  const cut = provider(async () => '{"summary": "At 1250 you trail peers in d');
+  const logs = await captureWarnings(() => generateCoachingReport(1250, recs(), [cut]));
+  assert.ok(logs.some((l) => /not valid JSON/.test(l) && /chars/.test(l) && l.includes("At 1250")));
+});
+
+test("a rejected reply logs exactly which field failed and why", async () => {
+  const sneaky = provider(async () =>
+    JSON.stringify({ summary: "visit https://x.example", topics: [{ topic: "dp", explanation: "Aim for 2100." }], keyInsight: "ok https://y.example" }),
+  );
+  const logs = await captureWarnings(() => generateCoachingReport(1250, recs(), [sneaky]));
+  const line = logs.find((l) => l.includes("reply rejected")) ?? "";
+  assert.match(line, /summary: contains a link/);
+  assert.match(line, /explanation for "dp": quotes a number that is not in the data \(2100\)/);
+  assert.match(line, /keyInsight: contains a link/);
+});
+
+test("a partly accepted reply says which parts were dropped, and still counts as AI", async () => {
+  const partial = provider(async () =>
+    JSON.stringify({ summary: "At 1250 you trail peers in dp and graphs.", topics: [{ topic: "dp", explanation: "You rarely practise dp." }], keyInsight: "Try https://x.example" }),
+  );
+  let result;
+  const logs = await captureWarnings(async () => { result = await generateCoachingReport(1250, recs(), [partial]); });
+  assert.equal(result.source, "ai");
+  assert.ok(logs.some((l) => /partly accepted/.test(l) && /keyInsight/.test(l)));
 });

@@ -15,7 +15,7 @@ Enter your Codeforces handle. In ~30 seconds you get:
 - **Weak Topic Analysis** — topics ranked by priority, classified as *avoided*, *underdeveloped*, or *struggling*
 - **Difficulty Targets** — the exact problem rating you should be solving in each weak topic
 - **Up to 15 Practice Problems** — up to 5 unsolved CF problems for each of your top 3 weak topics
-- **AI Coaching Report** — Groq (LLaMA 3.3 70B, Gemini fallback) explains each recommendation in plain language; the study plan and problems are computed, not generated
+- **AI Coaching Report** — Groq (GPT-OSS 120B, Gemini fallback) explains each recommendation in plain language; the study plan and problems are computed, not generated
 - **Priority Chart** — weak topics by relative priority (your top topic = 100)
 - **Difficulty Chart** — the median rating of problems you attempt vs peers, per weak topic
 - **Context** — which peer band you were compared with, how many peers, and how old that data is
@@ -106,7 +106,7 @@ For the top 3 weak topics, 5 unsolved problems within `recommendedDifficulty ± 
 
 The model never sees problems or links and never decides anything. It receives a small set of rounded facts (labels, priorities, target difficulty, your median vs peers' median) and returns JSON: a summary, one short explanation per weak topic, and a key insight. Each field is validated on its own and rejected if it contains a link, HTML or code, a Codeforces-style problem id, an unknown topic, or any rating that is not in the facts we supplied. Rejected or missing fields are filled from deterministic template text, and the labels, priorities, targets and problems always come from our own analysis.
 
-Providers: Groq first, Gemini as fallback. Each has a 12s timeout, no automatic retries, a cap of 3 concurrent calls (extra requests skip the provider rather than queue), and a 60s cooldown after a 429. A missing API key just means that provider is unavailable. If neither produces valid output the report is built entirely from the template and the response says so (`coachingReportSource: "template"`). Residual limit: validation cannot prove a sentence is *semantically* true, only that it contains nothing we can detect as invented.
+Providers: Groq first, Gemini as fallback. Every skipped provider, failed call, cut-off reply and rejected field is logged with its reason, so a template report can always be diagnosed from the server logs. Each has a 12s timeout, no automatic retries, a cap of 3 concurrent calls (extra requests skip the provider rather than queue), and a 60s cooldown after a 429. A missing API key just means that provider is unavailable. If neither produces valid output the report is built entirely from the template and the response says so (`coachingReportSource: "template"`). Residual limit: validation cannot prove a sentence is *semantically* true, only that it contains nothing we can detect as invented.
 
 ---
 
@@ -118,7 +118,7 @@ Providers: Groq first, Gemini as fallback. Each has a 12s timeout, no automatic 
 | Testing | node:test (backend, shared), Vitest + Testing Library (frontend) |
 | Backend | Node.js, Express 5, helmet, express-rate-limit |
 | Database | MongoDB Atlas |
-| AI | Groq API (LLaMA 3.3 70B) + Gemini 2.5 Flash fallback |
+| AI | Groq API (`openai/gpt-oss-120b`) + Gemini 2.5 Flash fallback |
 | Data Source | Codeforces API (public endpoints, no key required) |
 | Frontend Deploy | Vercel |
 | Backend Deploy | Railway |
@@ -332,6 +332,7 @@ Errors always look like `{ "error": "<safe message>", "code": "<CODE>" }`; the c
 | `ALLOWED_ORIGINS` | yes in prod | Comma-separated exact origins, e.g. your Vercel URL. Other origins get no CORS header |
 | `TRUST_PROXY` | yes on Railway | Set `1`. Left at `0`, every user shares one rate-limit bucket (safe against spoofing, bad for real traffic) |
 | `GROQ_API_KEY` / `GEMINI_API_KEY` | no | With neither, reports use the template text |
+| `GROQ_MODEL` / `GEMINI_MODEL` | no | Override the model names (defaults `openai/gpt-oss-120b`, `gemini-2.5-flash`). Providers retire models, so change these in the environment instead of the code |
 | `RATE_LIMIT_MAX`, `RATE_LIMIT_WINDOW_MS`, `MAX_CONCURRENT_ANALYSES`, `MAX_CONCURRENT_PER_CLIENT` | no | See limits below |
 
 **Build note:** `server/` imports `../shared/`, and `shared/` resolves `axios` from the repo root. The Railway build must therefore include the whole repository and run `npm install` at the root as well as in `server/`. Deploying only the `server/` folder would fail at startup.

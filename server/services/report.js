@@ -2,7 +2,7 @@
 // Problems and links are never sent to it and never accepted back from it.
 
 const MAX_TOPICS = 5;
-const LIMITS = { summary: 500, explanation: 350, keyInsight: 350 };
+const LIMITS = { summary: 700, explanation: 450, keyInsight: 450 };
 
 const pct = (x) => Math.round(x * 100); // 0.034 -> 3 (percentage points)
 
@@ -66,44 +66,67 @@ const allowedNumbers = (facts) => {
   return found;
 };
 
-// Anything that could smuggle in a link, HTML or code is rejected, not cleaned.
-const FORBIDDEN = /https?:|www\.|\]\(|[<>`]|codeforces/i;
+// Anything that could smuggle in a link, a domain, HTML or code is rejected, not cleaned.
+// The plain word "Codeforces" is fine; a link or domain is not.
+const FORBIDDEN = /https?:|www\.|\]\(|<|`|\.(com|org|net|io|ru|dev|app)\b/i;
 // Codeforces-style problem ids such as 77B, 1700A, 1850B1
 const PROBLEM_ID = /\b\d{1,4}[A-Z]\d?\b/;
 
-const cleanText = (value, max, allowed) => {
-  if (typeof value !== "string") return null;
+// Returns { text } when the string is safe, otherwise { reason } saying why not.
+const checkText = (value, max, allowed) => {
+  if (typeof value !== "string") return { reason: "missing or not text" };
   const text = value.trim();
-  if (text.length === 0 || text.length > max || FORBIDDEN.test(text) || PROBLEM_ID.test(text)) return null;
+  if (text.length === 0) return { reason: "empty" };
+  if (text.length > max) return { reason: `too long (${text.length} > ${max})` };
+  if (FORBIDDEN.test(text)) return { reason: "contains a link, domain, HTML or code" };
+  if (PROBLEM_ID.test(text)) return { reason: "contains a problem id" };
   // any 3+ digit number must be one we supplied (blocks invented ratings)
-  const numbers = text.match(/\d{3,}/g) ?? [];
-  if (numbers.some((n) => !allowed.has(String(Number(n))))) return null;
-  return text;
+  const invented = (text.match(/\d{3,}/g) ?? []).find((n) => !allowed.has(String(Number(n))));
+  if (invented) return { reason: `quotes a number that is not in the data (${invented})` };
+  return { text };
 };
 
 // Returns { summary, topics, keyInsight } with only safe strings, or null if unusable.
 // Each field is checked on its own; the caller fills any gap from the template.
-export const validateExplanations = (parsed, facts) => {
-  if (!parsed || typeof parsed !== "object") return null;
+// onReject(reason) is called for every field that was dropped, so logs can say why.
+export const validateExplanations = (parsed, facts, onReject = () => {}) => {
+  if (!parsed || typeof parsed !== "object") {
+    onReject("reply was not a JSON object");
+    return null;
+  }
   const allowed = allowedNumbers(facts);
   const known = new Set(facts.weakTopics.map((t) => t.topic));
 
   const topics = {};
+  if (!Array.isArray(parsed.topics)) onReject('"topics" is not a list');
   for (const item of Array.isArray(parsed.topics) ? parsed.topics : []) {
-    if (!item || !known.has(item.topic) || item.topic in topics) continue; // unknown/duplicate topic
-    const text = cleanText(item.explanation, LIMITS.explanation, allowed);
-    if (text) topics[item.topic] = text;
+    if (!item || !known.has(item.topic)) {
+      onReject(`topic ${JSON.stringify(item?.topic)} is not one of the weak topics`);
+      continue;
+    }
+    if (item.topic in topics) {
+      onReject(`topic "${item.topic}" appears twice`);
+      continue;
+    }
+    const r = checkText(item.explanation, LIMITS.explanation, allowed);
+    if (r.text) topics[item.topic] = r.text;
+    else onReject(`explanation for "${item.topic}": ${r.reason}`);
   }
 
-  const summary = cleanText(parsed.summary, LIMITS.summary, allowed);
-  const keyInsight = cleanText(parsed.keyInsight, LIMITS.keyInsight, allowed);
-  if (!summary && !keyInsight && Object.keys(topics).length === 0) return null;
-  return { summary, topics, keyInsight };
+  const summary = checkText(parsed.summary, LIMITS.summary, allowed);
+  if (!summary.text) onReject(`summary: ${summary.reason}`);
+  const keyInsight = checkText(parsed.keyInsight, LIMITS.keyInsight, allowed);
+  if (!keyInsight.text) onReject(`keyInsight: ${keyInsight.reason}`);
+
+  if (!summary.text && !keyInsight.text && Object.keys(topics).length === 0) return null;
+  return { summary: summary.text ?? null, topics, keyInsight: keyInsight.text ?? null };
 };
 
 // ---------- rendering ----------
 
-const titleCase = (s) => s.replace(/\b\w/g, (c) => c.toUpperCase());
+const ACRONYMS = new Set(["dp", "dsu", "fft", "dfs", "sat"]);
+const titleCase = (s) =>
+  s.replace(/[A-Za-z]+/g, (w) => (ACRONYMS.has(w.toLowerCase()) ? w.toUpperCase() : w[0].toUpperCase() + w.slice(1)));
 
 // Frontend splits on "## Key Insight", so keep that heading.
 export const renderReport = (facts, explanations) => {
