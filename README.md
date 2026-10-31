@@ -407,7 +407,7 @@ All limits are per server process. With several instances each would enforce its
 
 ## Known limitations
 
-- **Not systematically evaluated.** The analytics have unit tests on synthetic data and have been checked by hand on one real account, but not reviewed across many real users. Whether the thresholds and weights are well tuned, and whether higher confidence really means a more stable result, are untested.
+- **Not systematically evaluated.** The analytics have unit tests on synthetic data and have been checked by hand on multiple real accounts, but whether higher confidence really means a more stable result, is untested.
 - **Targets can sit below your rating.** Because the target is the peers' median attempted rating, in topics where stronger peers mostly practise easier problems it can be at or below your own level. On the author's own account, four of five targets were below their rating. Read it as "what peers one band up actually do", not "what you must solve".
 - **The baseline is a sample.** About 300 users per band, so standard deviations are loose. The top bands are smaller still: at the last run there were 148, 83 and 174 peers in the 2200 to 2300, 2300 to 2400 and 2400+ bands. Peer behaviour is evidence of what stronger users do, not proof that doing it causes improvement.
 - **Only the last 500 submissions are fetched.** Older solved problems can be recommended again, and topic history is truncated. The response reports how many problems the analysis used (`historyProblems`).
