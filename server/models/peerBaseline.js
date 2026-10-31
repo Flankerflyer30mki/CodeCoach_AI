@@ -1,42 +1,16 @@
 import mongoose from "mongoose";
+import {
+  peerBaselineDefinition,
+  baselineMetaDefinition,
+} from "../../shared/peerBaselineSchema.js";
 
-const PeerBaselineSchema = new mongoose.Schema({
-  bandMin: Number,
-  bandMax: Number,
-  topic: String,
-  userCount: Number,
-  computedAt: Date,
-  metrics: {
-    attemptRatio: {
-      mean: Number,
-      std: Number,
-    },
-    solveRate: {
-      mean: Number,
-      std: Number,
-    },
-    coverage: {
-      p10: { mean: Number, std: Number },
-      p50: { mean: Number, std: Number },
-      p90: { mean: Number, std: Number },
-    },
-    dcr: {
-      bucket0_100: {
-        mean: Number,
-        std: Number,
-      },
-      bucket100_300: {
-        mean: Number,
-        std: Number,
-      },
-      bucket300plus: {
-        mean: Number,
-        std: Number,
-      },
-    },
-  },
-});
+const PeerBaselineSchema = new mongoose.Schema(peerBaselineDefinition);
+PeerBaselineSchema.index({ version: 1, bandKey: 1, topic: 1 }, { unique: true });
 
 const PeerBaseline = mongoose.model("PeerBaselineData", PeerBaselineSchema);
+export const BaselineMeta = mongoose.model(
+  "BaselineMeta",
+  new mongoose.Schema(baselineMetaDefinition),
+);
 
 export default PeerBaseline;

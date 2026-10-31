@@ -1,7 +1,8 @@
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, Navigate } from "react-router-dom";
 import CoachingReport from "../components/CoachingReport";
 import WeakTopicCard from "../components/WeakTopicCard";
-import StrongTopics from "../components/StrongTopics";
+import TopicChips from "../components/TopicChips";
+import BaselineNote from "../components/BaselineNote";
 import StudyPlan from "../components/StudyPlan";
 import PriorityChart from "../components/charts/priorityChart.jsx";
 import DifficultyChart from "../components/charts/DifficultyChart.jsx";
@@ -25,13 +26,11 @@ export default function ResultsPage() {
   const navigate = useNavigate();
   const result = state?.result;
 
-  if (!result) {
-    navigate("/");
-    return null;
-  }
+  if (!result) return <Navigate to="/" replace />;
 
-  const { handle, rating, rank, recommendations, coachingReport } = result;
-  const isTopRated = rating >= 2400;
+  const { handle, rating, rank, recommendations, coachingReport, coachingReportSource, historyProblems } = result;
+  // the server reports "no peer band above you" as baseline: null
+  const isTopRated = !recommendations.baseline;
   const rankColor = rankColors[rank?.toLowerCase()] || "#94a3b8";
 
   return (
@@ -79,8 +78,10 @@ export default function ResultsPage() {
           </button>
         </div>
 
+        <BaselineNote baseline={recommendations.baseline} historyProblems={historyProblems} />
+
         {/* Coaching Report */}
-        <CoachingReport report={coachingReport} />
+        {!isTopRated && <CoachingReport report={coachingReport} source={coachingReportSource} />}
         {isTopRated && (
           <div
             className="mt-6 rounded-xl p-5"
@@ -118,20 +119,40 @@ export default function ResultsPage() {
             >
               Weak topics — ranked by priority
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {recommendations.weakTopics
-                .filter((t) => t.priority > 0)
-                .map((topic) => (
+            {recommendations.weakTopics.length === 0 ? (
+              <p
+                className="rounded-xl p-5 text-sm"
+                style={{
+                  backgroundColor: "var(--bg-secondary)",
+                  border: "1px solid var(--border)",
+                  color: "var(--text-secondary)",
+                }}
+              >
+                No topic stands out as clearly behind peers one band above you.
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {recommendations.weakTopics.map((topic) => (
                   <WeakTopicCard key={topic.topic} topic={topic} />
                 ))}
-            </div>
+              </div>
+            )}
           </div>
         )}
 
         {/* Strong Topics */}
         <div className="mt-8">
-          <StrongTopics topics={recommendations.strongTopics} />
+          <TopicChips title="Strong topics" tone="strong" topics={recommendations.strongTopics} />
         </div>
+        {!isTopRated && (
+          <div className="mt-8">
+            <TopicChips
+              title="Not enough data to judge"
+              caption="You have too few recent attempts in these topics for a reliable comparison, so they are not ranked."
+              topics={recommendations.insufficientData}
+            />
+          </div>
+        )}
 
         {/* Study Plan */}
         <div className="mt-8">

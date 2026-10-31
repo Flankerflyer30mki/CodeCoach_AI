@@ -5,9 +5,9 @@ const classificationColors = {
 };
 
 const metricDescriptions = {
-  targetDifficulty: "Problem rating peers solve in this topic",
+  targetDifficulty: "Median problem rating peers attempt in this topic",
   coverageGap: "Your peers vs you in rating points (90th %ile comparison)",
-  confidence: "Trust level based on your attempt history",
+  confidence: "How much recent history you have here (higher = more reliable)",
 };
 
 export default function WeakTopicCard({ topic }) {
@@ -18,17 +18,24 @@ export default function WeakTopicCard({ topic }) {
     recommendedDifficulty,
     confidence,
     gaps,
+    signals,
     recommendedProblems,
   } = topic;
+  const alsoFlagged = (signals ?? []).filter((s) => s !== classification);
 
   const colors = classificationColors[classification] || {
     bg: "var(--bg-secondary)",
     text: "var(--text-secondary)",
     border: "var(--border)",
   };
-  const coverageGap = Math.round(gaps.coverageGap);
+  const coverageGap =
+    gaps.coverageGap === null ? null : Math.round(gaps.coverageGap);
   const coverageGapDisplay =
-    coverageGap >= 0 ? `+${coverageGap}` : `${coverageGap}`;
+    coverageGap === null
+      ? "n/a"
+      : coverageGap >= 0
+        ? `+${coverageGap}`
+        : `${coverageGap}`;
 
   return (
     <div
@@ -59,9 +66,14 @@ export default function WeakTopicCard({ topic }) {
           className="ml-auto text-xs"
           style={{ color: "var(--text-muted)" }}
         >
-          Priority {Math.round(priority * 10) / 10}
+          Priority {Math.round(priority)}/100
         </span>
       </div>
+      {alsoFlagged.length > 0 && (
+        <p className="text-xs mb-3 -mt-2" style={{ color: "var(--text-secondary)" }}>
+          Also flagged: {alsoFlagged.join(", ")}
+        </p>
+      )}
 
       <div className="grid grid-cols-3 gap-2 mb-4">
         <div

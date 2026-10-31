@@ -1,57 +1,85 @@
-import { connectDb } from "./savetoDB.js";
-import { saveBaseline } from "./savetoDB.js";
-import { getRatedUsers } from "./cfClient.js";
-import { getUserSubmissions } from "../shared/cfApi.js";
-import { computeBaseline } from "./computeBaseline.js";
-import config from "./config.js";
 import mongoose from "mongoose";
+import config from "./config.js";
+import analytics from "../shared/analyticsConfig.js";
+import { BANDS, getBand } from "../shared/bands.js";
+import { getUserSubmissions } from "../shared/cfApi.js";
+import { computeMetrics } from "../shared/metrics.js";
+import { getMean } from "../shared/mathUtils.js";
+import { getRatedUsers } from "./cfClient.js";
+import { computeBaseline } from "./computeBaseline.js";
+import { makeRng, shuffle } from "./sampling.js";
+import { connectDb, saveBand, publishVersion, BaselineMeta } from "./savetoDB.js";
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const main = async () => {
-    await connectDb();
-    const lastDoc = await mongoose.connection.db.collection("peerbaselinedatas").findOne({}, { sort: { computedAt: -1 } });
-    if (lastDoc){
-        const daysSinceLastRun =(Date.now() - new Date(lastDoc.computedAt)) / (1000 * 60 * 60 * 24);
-        if (daysSinceLastRun < 14) {
-            console.log(`Last run was ${Math.floor(daysSinceLastRun)} days ago. Skipping.`,);
-            mongoose.connection.close();
-            return;
-        }
-        else {
-            console.log("14 days passed. Clearing old data and recomputing...");
-            await mongoose.connection.db.collection("peerbaselinedatas").deleteMany({});
-        }
+  await connectDb();
+
+  const meta = await BaselineMeta.findById("current");
+  if (meta) {
+    const days = (Date.now() - meta.computedAt) / (1000 * 60 * 60 * 24);
+    if (days < config.refreshDays) {
+      console.log(`Baseline is ${Math.floor(days)} days old. Skipping.`);
+      return;
     }
-    console.log("Fetching rated users...");
-    const allUsers = await getRatedUsers();
-    console.log(`Total users fetched:${allUsers.length}`);
-    for (const [bandMin, bandMax] of config.ratingBands) {
-        console.log(`Processing band ${bandMin}-${bandMax}`);
-        const bandUsers = allUsers.filter((u) => u.rating >= bandMin && u.rating < bandMax,);
-        console.log(`Users in band:${bandUsers.length}`);
-        const sampled = bandUsers.slice(0, config.usersPerBand);
-        const usersSubmissions = [];
-        const userRatings = [];
-        for (const user of sampled) {
-          console.log(`Fetching submissions for ${user.handle}`);
-          const submissions = await getUserSubmissions(user.handle);
-          usersSubmissions.push(submissions);
-          userRatings.push(user.rating);
-        }
-        console.log(`Computing baseline for band ${bandMin}-${bandMax}`);
-        const baseline = computeBaseline(usersSubmissions, userRatings);
-        for (const topic in baseline) {
-          await saveBaseline({
-            bandMin,
-            bandMax,
-            topic,
-            userCount: sampled.length,
-            computedAt: new Date(),
-            metrics: baseline[topic],
-          });
-        }
-        console.log(`Band ${bandMin}-${bandMax} done`);
+  }
+
+  const seed = Date.now() % 2147483647;
+  const rng = makeRng(seed);
+  const version = new Date().toISOString();
+  console.log(`New baseline version ${version} (seed ${seed})`);
+
+  const allUsers = await getRatedUsers();
+  console.log(`Active rated users: ${allUsers.length}`);
+
+  for (const band of BANDS) {
+    const candidates = shuffle(
+      allUsers.filter((u) => getBand(u.rating)?.key === band.key),
+      rng,
+    ).slice(0, config.usersPerBand * config.candidateMultiplier);
+
+    const profiles = [];
+    const ratings = [];
+    for (const user of candidates) {
+      if (profiles.length >= config.usersPerBand) break;
+      try {
+        await sleep(config.rateLimitMs);
+        const submissions = await getUserSubmissions(user.handle);
+        const { topics, totalProblems } = computeMetrics(submissions, user.rating);
+        if (totalProblems < analytics.minTotalProblems) continue; // too little history
+        profiles.push(topics);
+        ratings.push(user.rating);
+      } catch (err) {
+        console.warn(`Skipping ${user.handle}: ${err.message}`);
+      }
     }
-    console.log("Pipeline complete");
-    mongoose.connection.close();
+
+    console.log(`Band ${band.key}: ${profiles.length} valid peers of ${candidates.length} candidates`);
+    if (profiles.length < analytics.minPeersPerMetric) {
+      throw new Error(`Band ${band.key} has too few valid peers (${profiles.length}); aborting, nothing published`);
+    }
+
+    const baseline = computeBaseline(profiles);
+    await saveBand(
+      Object.entries(baseline).map(([topic, metrics]) => ({
+        version,
+        bandKey: band.key,
+        topic,
+        userCount: profiles.length,
+        sampleMeanRating: getMean(ratings),
+        computedAt: new Date(),
+        metrics,
+      })),
+    );
+  }
+
+  await publishVersion(version, seed);
+  console.log("Pipeline complete, new baseline is live");
 };
-main();
+
+main()
+  .catch((err) => {
+    console.error("Pipeline failed, previous baseline (if any) is untouched:", err.message);
+    process.exitCode = 1;
+  })
+  .finally(() => mongoose.connection.close());

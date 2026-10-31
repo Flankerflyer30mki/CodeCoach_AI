@@ -15,7 +15,7 @@ const classificationColors = {
 };
 
 export default function PriorityChart({ weakTopics }) {
-  const data = weakTopics
+  const data = (weakTopics ?? [])
     .filter((t) => t.priority > 0)
     .slice(0, 15)
     .map((t) => ({
@@ -24,6 +24,11 @@ export default function PriorityChart({ weakTopics }) {
       classification: t.classification,
     }))
     .reverse();
+
+  if (data.length === 0) return null;
+
+  // the SVG is not readable by screen readers, so give them the same data as text
+  const summary = [...data].reverse().map((d) => `${d.topic} ${d.priority}`).join(", ");
 
   return (
     <div
@@ -37,13 +42,15 @@ export default function PriorityChart({ weakTopics }) {
         className="text-sm font-medium mb-4"
         style={{ color: "var(--text-secondary)" }}
       >
-        Priority scores by topic
+        Relative priority by topic (your top topic = 100)
       </p>
-      <ResponsiveContainer width="100%" height={300}>
-        <BarChart data={data} layout="vertical" margin={{ left: 80 }}>
+      <p className="sr-only">Relative priority by topic: {summary}</p>
+      <div aria-hidden="true">
+      <ResponsiveContainer width="100%" height={Math.max(160, data.length * 32 + 60)}>
+        <BarChart data={data} layout="vertical" margin={{ left: 80 }} accessibilityLayer={false}>
           <XAxis
             type="number"
-            tick={{ fontSize: 12, fill: "#475569" }}
+            tick={{ fontSize: 12, fill: "#8b9ab0" }}
             axisLine={{ stroke: "#334155" }}
             tickLine={{ stroke: "#334155" }}
           />
@@ -75,6 +82,7 @@ export default function PriorityChart({ weakTopics }) {
           </Bar>
         </BarChart>
       </ResponsiveContainer>
+      </div>
       <div className="flex gap-4 mt-3 justify-center">
         <span
           className="flex items-center gap-1 text-xs"

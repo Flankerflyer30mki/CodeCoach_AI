@@ -10,7 +10,8 @@ export default function KeyInsight({ report }) {
     return null;
   }
 
-  const keyInsightContent = report.slice(keyInsightIndex).trim();
+  // the card already has a "Key Insight" label, so drop the markdown heading itself
+  const keyInsightContent = report.slice(keyInsightIndex + "## Key Insight".length).trim();
 
   return (
     <div

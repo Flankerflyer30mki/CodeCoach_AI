@@ -1,5 +1,5 @@
 import ReactMarkdown from "react-markdown";
-export default function CoachingReport({ report }) {
+export default function CoachingReport({ report, source }) {
   if (!report) {
     return (
       <div
@@ -19,9 +19,7 @@ export default function CoachingReport({ report }) {
         </p>{" "}
         <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
           {" "}
-          AI coaching report is temporarily unavailable due to rate limits. Your
-          analytics and recommendations are accurate — please try again later
-          for the full report.{" "}
+          No coaching report is available for this analysis.{" "}
         </p>{" "}
       </div>
     );
@@ -52,6 +50,12 @@ export default function CoachingReport({ report }) {
         {" "}
         <ReactMarkdown>{mainReport}</ReactMarkdown>{" "}
       </div>{" "}
+      {source === "template" && (
+        <p className="text-xs mt-4" style={{ color: "var(--text-muted)" }}>
+          AI wording is unavailable right now, so this is a standard summary of
+          the same analysis.
+        </p>
+      )}
     </div>
   );
 }

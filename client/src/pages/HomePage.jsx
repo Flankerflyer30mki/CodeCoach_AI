@@ -1,89 +1,28 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useId } from "react";
 import { useNavigate } from "react-router-dom";
 import useAnalyze from "../hooks/useAnalyze";
+import LoadingScreen from "../components/LoadingScreen";
+import ErrorMessage from "../components/ErrorMessage";
 
-function LoadingScreen({ handle }) {
-  const steps = [
-    "Fetching Codeforces submissions",
-    "Computing weighted topic metrics",
-    "Comparing against 300+ peer profiles",
-    "Generating AI coaching report...",
-  ];
-  const [visibleSteps, setVisibleSteps] = useState(0);
-
-  useEffect(() => {
-    const timings = [500, 3000, 6000, 10000];
-    const timers = timings.map((delay, index) =>
-      setTimeout(() => setVisibleSteps(index + 1), delay),
-    );
-    return () => timers.forEach(clearTimeout);
-  }, []);
-
-  return (
-    <div
-      className="min-h-screen flex flex-col items-center justify-center px-4 text-center"
-      style={{ backgroundColor: "var(--bg-primary)" }}
-    >
-      <div className="w-12 h-12 border-4 border-slate-700 border-t-blue-500 rounded-full animate-spin mb-6"></div>
-      <h2
-        className="text-xl font-medium mb-2"
-        style={{ color: "var(--text-primary)" }}
-      >
-        Analyzing {handle}
-      </h2>
-      <p
-        className="text-sm max-w-sm mb-8"
-        style={{ color: "var(--text-secondary)" }}
-      >
-        Fetching your submissions, computing analysis, and generating your
-        coaching report.
-      </p>
-      <div className="flex flex-col gap-3 text-sm">
-        {steps.map((step, index) => (
-          <div
-            key={index}
-            className="flex items-center gap-3 transition-opacity duration-500"
-            style={{ opacity: visibleSteps > index ? 1 : 0.2 }}
-          >
-            <span
-              style={{
-                color: visibleSteps > index ? "#22c55e" : "var(--text-muted)",
-              }}
-            >
-              {visibleSteps > index ? "✓" : "○"}
-            </span>
-            <span
-              style={{
-                color:
-                  visibleSteps > index
-                    ? "var(--text-primary)"
-                    : "var(--text-muted)",
-              }}
-            >
-              {step}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 export default function HomePage() {
   const [handle, setHandle] = useState("");
-  const { loading, error, result, analyze } = useAnalyze();
+  const { loading, error, result, analyze, cancel } = useAnalyze();
+  const inputId = useId();
+  const errorId = useId();
   const navigate = useNavigate();
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (e) => {
+    e.preventDefault();
     if (!handle.trim()) return;
     await analyze(handle.trim());
   };
 
-  if (result) {
-    navigate("/results", { state: { result } });
-  }
+  useEffect(() => {
+    if (result) navigate("/results", { state: { result } });
+  }, [result, navigate]);
 
   if (loading) {
-    return <LoadingScreen handle={handle} />;
+    return <LoadingScreen handle={handle.trim()} onCancel={cancel} />;
   }
 
   return (
@@ -113,17 +52,26 @@ export default function HomePage() {
           who already crossed your current rating.
         </p>
         <p className="text-sm mb-10" style={{ color: "var(--text-muted)" }}>
-          Compared against 300+ programmers one rating band above you.
+          Compared against hundreds of recently active programmers one rating band above you.
         </p>
 
         {/* Search */}
-        <div className="flex gap-3 w-full max-w-lg">
+        <form onSubmit={handleSubmit} className="flex gap-3 w-full max-w-lg">
+          <label htmlFor={inputId} className="sr-only">
+            Codeforces handle
+          </label>
           <input
+            id={inputId}
             type="text"
             value={handle}
             onChange={(e) => setHandle(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
             placeholder="Enter your CF handle"
+            maxLength={24}
+            autoComplete="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            aria-invalid={error ? "true" : undefined}
+            aria-describedby={error ? errorId : undefined}
             className="flex-1 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             style={{
               backgroundColor: "var(--bg-secondary)",
@@ -132,20 +80,16 @@ export default function HomePage() {
             }}
           />
           <button
-            onClick={handleSubmit}
-            disabled={loading}
-            className="px-6 py-3 rounded-lg font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-            style={{ backgroundColor: "var(--blue)", color: "white" }}
+            type="submit"
+            disabled={loading || !handle.trim()}
+            className="px-6 py-3 rounded-lg font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-blue-300"
+            style={{ backgroundColor: "var(--blue-strong)", color: "white" }}
           >
             Analyze →
           </button>
-        </div>
+        </form>
 
-        {error && (
-          <p className="mt-4 text-sm" style={{ color: "var(--red)" }}>
-            {error}
-          </p>
-        )}
+        <ErrorMessage error={error} id={errorId} />
 
         {/* Trust indicators */}
         <div
@@ -181,12 +125,12 @@ export default function HomePage() {
             {
               n: "2",
               title: "Compare",
-              desc: "Your metrics are compared against 300+ programmers already one rating band above you.",
+              desc: "Your metrics are compared against a sample of recently active programmers already one rating band above you.",
             },
             {
               n: "3",
               title: "Improve",
-              desc: "Get ranked weak topics, difficulty targets, 15 curated problems, and an AI coaching report.",
+              desc: "Get ranked weak topics, difficulty targets, up to 15 unsolved practice problems, and a coaching report.",
             },
           ].map((step) => (
             <div key={step.n} className="text-center">
@@ -239,17 +183,17 @@ export default function HomePage() {
             {
               icon: "🎯",
               title: "Difficulty Targets",
-              desc: "Know exactly what rating of problems to solve next. Based on the median difficulty peers at your target rating attempt in each topic.",
+              desc: "Know exactly what rating of problems to solve next. Based on the median difficulty that peers one band above you attempt in each topic.",
             },
             {
               icon: "📚",
               title: "Practice Recommendations",
-              desc: "Five curated unsolved problems for each of your top 3 weak topics. Real CF problems at the right difficulty, filtered from your solved history.",
+              desc: "Up to five unsolved problems for each of your top 3 weak topics. Real Codeforces problems near the target difficulty, filtered against your recent solved history.",
             },
             {
               icon: "🤖",
               title: "AI Coaching Report",
-              desc: "Gemini explains every recommendation in plain english. Get a personalized 5-day study plan with specific problems and reasoning behind each suggestion.",
+              desc: "An AI model explains each recommendation in plain English. The numbers, targets and problems are computed from your data, not written by the AI. If the AI is unavailable you still get a standard summary.",
             },
             {
               icon: "📈",
@@ -259,7 +203,7 @@ export default function HomePage() {
             {
               icon: "🎯",
               title: "Confidence Score",
-              desc: "Every recommendation comes with a confidence score based on your attempt count, rating spread, and recency. Low confidence = insufficient data, not a guess.",
+              desc: "Every recommendation comes with a confidence score based on how many recent attempts you have in the topic. Low confidence means we say there is not enough data, instead of guessing.",
             },
           ].map((f) => (
             <div

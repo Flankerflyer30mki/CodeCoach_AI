@@ -1,71 +1,32 @@
 import mongoose from "mongoose";
 import config from "./config.js";
+import {
+  peerBaselineDefinition,
+  baselineMetaDefinition,
+} from "../shared/peerBaselineSchema.js";
 
-//schema
-const PeerBaselineSchema = new mongoose.Schema({
-  bandMin: Number,
-  bandMax: Number,
-  topic: String,
-  userCount: Number,
-  computedAt: Date,
-  metrics: {
-    attemptRatio: {
-      mean: Number,
-      std: Number,
-    },
-    solveRate: {
-      mean: Number,
-      std: Number,
-    },
-    coverage: {
-      p10: { mean: Number, std: Number },
-      p50: { mean: Number, std: Number },
-      p90: { mean: Number, std: Number },
-    },
-    dcr: {
-      bucket0_100: {
-        mean: Number,
-        std: Number,
-      },
-      bucket100_300: {
-        mean: Number,
-        std: Number,
-      },
-      bucket300plus: {
-        mean: Number,
-        std: Number,
-      },
-    },
-  },
-});
+const PeerBaselineSchema = new mongoose.Schema(peerBaselineDefinition);
+PeerBaselineSchema.index({ version: 1, bandKey: 1, topic: 1 }, { unique: true });
 
-//model
-const PeerBaseline = mongoose.model("PeerBaselineData", PeerBaselineSchema);
+export const PeerBaseline = mongoose.model("PeerBaselineData", PeerBaselineSchema);
+export const BaselineMeta = mongoose.model(
+  "BaselineMeta",
+  new mongoose.Schema(baselineMetaDefinition),
+);
 
-//async fn to connect db
-const connectDb = async () => {
-  try {
-    await mongoose.connect(config.mongoUri);
-    console.log("MongoDB connected successfully");
-  } catch (error) {
-    console.error("MongoDB connection failed:");
-    console.error(error.message);
-    process.exit(1);
-  }
+export const connectDb = async () => {
+  await mongoose.connect(config.mongoUri);
+  await PeerBaseline.init(); // make sure the unique index exists
 };
 
-//saveBaseline
+export const saveBand = (docs) => PeerBaseline.insertMany(docs);
 
-const saveBaseline = async (data) => {
-  try {
-    const doc = new PeerBaseline(data);
-    await doc.save();
-    console.log("Data saved");
-  } catch (err) {
-    console.error("Failed to save");
-    console.error(err.message);
-    process.exit(1);
-  }
+// Called ONLY after every band is written: this is what makes a new baseline live.
+export const publishVersion = async (version, seed) => {
+  await BaselineMeta.findOneAndUpdate(
+    { _id: "current" },
+    { version, seed, computedAt: new Date() },
+    { upsert: true },
+  );
+  await PeerBaseline.deleteMany({ version: { $ne: version } }); // drop old versions
 };
-
-export { connectDb, saveBaseline };
